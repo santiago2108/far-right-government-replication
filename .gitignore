@@ -1,10 +1,10 @@
-# RStudio / R
+# R / RStudio
 .Rproj.user/
 .Rhistory
 .RData
 .Ruserdata
 
-# Raw data (ESS, author materials)
+# Raw data (do not commit survey microdata or privately shared files)
 data/raw/
 
 # Derived data
@@ -13,3 +13,4 @@ data/final/
 
 # Outputs
 output/
+
