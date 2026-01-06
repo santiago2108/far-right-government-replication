@@ -1,0 +1,35 @@
+# Progress Log – Term Paper Replication
+
+This file documents daily progress, decisions, and next steps for the replication
+of Muis, Brils & Gaidytė (2022).
+
+---
+
+## 2026-01-06
+
+### What I did
+- Set up clean R project structure and GitHub repository.
+- Resolved Git/GitHub synchronization issues.
+- Downloaded and renamed ESS rounds 1–8 (Stata format).
+- Wrote and ran `02_import_ess.R`.
+- Successfully combined ESS waves 1–8 into a single dataset
+  (`ess_raw_combined.rds`).
+- Verified presence of key variables:
+  - party vote variables (`prtvt*`)
+  - immigration-related items (`im*`)
+  - political trust items (`trstprl`, `trstplt`, `trstprt`).
+
+### What worked / issues
+- ESS import and stacking worked as expected.
+- Variable coverage confirmed via sanity checks.
+- No data loss in vote or trust variables.
+
+### Next steps
+- Translate author-provided SPSS syntax for individual-level variables
+  (political trust, immigration attitudes, authoritarianism).
+- Implement this logic in `03_harmonize_ess.R`.
+
+## 2026-01-07
+
+### What I did
+-Nothing yet
