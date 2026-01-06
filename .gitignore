@@ -1,0 +1,15 @@
+# RStudio / R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Raw data (ESS, author materials)
+data/raw/
+
+# Derived data
+data/intermediate/
+data/final/
+
+# Outputs
+output/
