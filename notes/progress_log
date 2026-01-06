@@ -18,6 +18,8 @@ of Muis, Brils & Gaidytė (2022).
   - party vote variables (`prtvt*`)
   - immigration-related items (`im*`)
   - political trust items (`trstprl`, `trstplt`, `trstprt`).
+- In order to exract the variables I need (given they're not explicitly specified in the paper or any attachements) I contacted the author who kindly sent me SPS and Excel files containing relevant information on the varables they used for the paper. No R code was shared. First of all it is not allowed as per the professor's instructions and second the author mentioned that the IT of the university accidentally deleted his files.
+- I ran the prvided files through ChatGPT to extrat a list of variables I can work with.
 
 ### What worked / issues
 - ESS import and stacking worked as expected.
