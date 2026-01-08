@@ -1,71 +1,99 @@
 # ============================================================
-# 02_import_ess.R
-# Import ESS rounds 1–8, keep needed variables, combine, save
+# 02_combine_ess_raw.R  (FIXED + your paths)
 # ============================================================
 
-library(haven)
 library(dplyr)
+library(haven)
 
-# ---- Paths ----
-ess_dir <- "data/raw/ess"
-out_dir <- "data/intermediate"
+ESS_RAW_DIR <- "/home/santiagocal09/LMU/ResearchDesign_WS2526/term_paper/data/raw/ess"
+OUT_PATH    <- "/home/santiagocal09/LMU/ResearchDesign_WS2526/term_paper/data/intermediate/ess_raw_combined.rds"
 
-file_1 <- paste0(ess_dir, "/ESS1_raw.dta")
-file_2 <- paste0(ess_dir, "/ESS2_raw.dta")
-file_3 <- paste0(ess_dir, "/ESS3_raw.dta")
-file_4 <- paste0(ess_dir, "/ESS4_raw.dta")
-file_5 <- paste0(ess_dir, "/ESS5_raw.dta")
-file_6 <- paste0(ess_dir, "/ESS6_raw.dta")
-file_7 <- paste0(ess_dir, "/ESS7_raw.dta")
-file_8 <- paste0(ess_dir, "/ESS8_raw.dta")
-
-# ---- Variables to keep ----
-# Keep: IDs, interview date, voting, trust, basic controls
-vars_keep <- c(
-  "cntry", "idno", "essround",
-  "inwyr", "inwmm", "inwdd",
-  "vote",
-  "trstprl", "trstplt", "trstprt",
-  "agea", "gndr", "eduyrs", "eisced",
-  "hinctnta", "uempla",
-  "rlgblg", "rlgdgr", "rlgatnd",
-  "polintr", "lrscale",
-  "stfeco", "stfgov", "stfdem",
-  "gincdif", "domicil"
+# Variables needed downstream (minimal, for Muis, Brils & Gaidytė 2022 + date harmonisation)
+keep_vars <- c(
+  "cntry","idno","essround",
+  
+  # interview date variables (round-dependent)
+  "inwyr","inwmm","inwdd",          # rounds 1–2
+  "inwyys","inwmms","inwdds",       # rounds 3–8 (start date)
+  
+  # main variables + controls
+  "vote","trstprl","trstplt","trstprt",
+  "agea","gndr","eduyrs","uempla","lrscale",
+  "stfeco","stfgov","stfdem",
+  "gincdif",
+  
+  # income (round-dependent)
+  "hinctnt","hinctnta",
+  
+  # anti-immigration (paper/SPSS)
+  "imbgeco","imueclt","imwbcnt",
+  
+  # authoritarian sentiment (paper/SPSS)
+  "ipfrule","ipstrgv","ipbhprp","imptrad","impsafe"
 )
 
-# ---- Import each round ----
-ess1 <- read_dta(file_1) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+read_one <- function(path) {
+  df <- read_dta(path)
+  
+  # keep only columns that exist in this round
+  df <- df %>% select(any_of(keep_vars))
+  
+  # ensure date columns exist (create as NA if absent in this round)
+  need_date_cols <- c("inwyr","inwmm","inwdd","inwyys","inwmms","inwdds")
+  for (v in need_date_cols) {
+    if (!v %in% names(df)) df[[v]] <- NA
+  }
+  
+  # harmonize interview date into common names: inwyr/inwmm/inwdd
+  # ---- harmonise interview date into inwyr/inwmm/inwdd ----
+  # ESS1–2: inwyr/inwmm/inwdd
+  # ESS3–8: inwyys/inwmms/inwdds (start date)
+  
+  if (!"inwyr" %in% names(df) && "inwyys" %in% names(df)) df$inwyr <- df$inwyys
+  if (!"inwmm" %in% names(df) && "inwmms" %in% names(df)) df$inwmm <- df$inwmms
+  if (!"inwdd" %in% names(df) && "inwdds" %in% names(df)) df$inwdd <- df$inwdds
+  
+  if ("inwyys" %in% names(df)) df$inwyr <- dplyr::coalesce(df$inwyr, df$inwyys)
+  if ("inwmms" %in% names(df)) df$inwmm <- dplyr::coalesce(df$inwmm, df$inwmms)
+  if ("inwdds" %in% names(df)) df$inwdd <- dplyr::coalesce(df$inwdd, df$inwdds)
+  
+  df <- df %>% dplyr::select(-dplyr::any_of(c("inwyys","inwmms","inwdds")))
+  
+  # ensure income columns exist; harmonize to hinctnta
+  if (!"hinctnta" %in% names(df)) df[["hinctnta"]] <- NA
+  if (!"hinctnt"  %in% names(df)) df[["hinctnt"]]  <- NA
+  
+  df <- df %>%
+    mutate(hinctnta = coalesce(hinctnta, hinctnt)) %>%
+    select(-any_of("hinctnt"))
+  
+  df
+}
 
-ess2 <- read_dta(file_2) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+files <- file.path(ESS_RAW_DIR, paste0("ESS", 1:8, "_raw.dta"))
 
-ess3 <- read_dta(file_3) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+# fail early if any file is missing
+missing_files <- files[!file.exists(files)]
+if (length(missing_files) > 0) {
+  stop("These files are missing:\n", paste(missing_files, collapse = "\n"))
+}
 
-ess4 <- read_dta(file_4) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+ess_raw_combined <- bind_rows(lapply(files, read_one))
 
-ess5 <- read_dta(file_5) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
+saveRDS(ess_raw_combined, OUT_PATH)
 
-ess6 <- read_dta(file_6) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+message("Saved combined raw file to: ", OUT_PATH)
 
-ess7 <- read_dta(file_7) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
+# Quick diagnostic: date availability by round
+diag <- ess_raw_combined %>%
+  group_by(essround) %>%
+  summarise(
+    n = n(),
+    pct_na_inwyr = mean(is.na(inwyr)),
+    pct_na_inwmm = mean(is.na(inwmm)),
+    pct_na_inwdd = mean(is.na(inwdd))
+  )
+print(diag)
 
-ess8 <- read_dta(file_8) |>
-  select(any_of(vars_keep), starts_with("prtvt"), starts_with("im"))
-
-# ---- Combine ----
-ess_all <- bind_rows(ess1, ess2, ess3, ess4, ess5, ess6, ess7, ess8)
-
-# ---- Quick checks ----
-dim(ess_all)
-table(ess_all$essround, useNA = "ifany")
-
-# ---- Save ----
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(ess_all, paste0(out_dir, "/ess_raw_combined.rds"))
+  
