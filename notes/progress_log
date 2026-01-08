@@ -31,7 +31,116 @@ of Muis, Brils & Gaidytė (2022).
   (political trust, immigration attitudes, authoritarianism).
 - Implement this logic in `03_harmonize_ess.R`.
 
-## 2026-01-07
+## 2026-01-07 / 2026-01-08
 
 ### What I did
--Nothing yet
+ESS Data Preparation Log (ESS1–ESS8)
+Goal
+Reconstruct the individual-level variables used in Muis, Brils & Gaidytė (2022) from ESS rounds 1–8, following the original SPSS syntax as closely as possible, and produce a harmonized dataset for downstream analysis.
+Final outputs:
+data/intermediate/ess_raw_combined.rds
+data/intermediate/ess_harmonized.rds
+
+Step 1: Raw data combination (02_import_ess.R)
+What was done
+Imported ESS rounds 1–8 from .dta files.
+
+
+Kept only variables required for:
+political trust
+anti-immigration attitudes
+authoritarian values
+redistribution
+economic dissatisfaction
+controls
+interview timing
+
+Harmonized interview date variables, which differ by ESS round:
+ESS1–2: inwyr, inwmm, inwdd
+ESS3–8: inwyys, inwmms, inwdds (start date)
+
+Explicitly mapped all rounds to unified variables:
+inwyr, inwmm, inwdd
+
+Harmonized income variables (hinctnt → hinctnta).
+
+Saved combined raw file to ess_raw_combined.rds.
+
+Problems encountered
+Interview date missing for rounds 3–8
+ Cause: the initial combine script only kept inwyr/inwmm/inwdd, which do not exist in later ESS rounds.
+
+coalesce() failing silently
+ Cause: missing columns + haven_labelled types.
+
+Fixes
+Explicitly added missing date columns as NA before harmonisation.
+Used start-date variables (inwyys/inwmms/inwdds) for ESS3–8.
+Verified date availability by round after recombination.
+
+Result
+Interview date components available for all rounds.
+Very small residual missingness in ESS5 (~3–5%), originating from the source data.
+
+Step 2: Harmonization (03_harmonize_ess.R)
+
+What was done
+Filtered to the 22 countries used in the paper.
+Converted all haven_labelled variables to numeric using zap_labels().
+Constructed interviewdate as YYYYMMDD, with SPSS-style within country-round fallback to the minimum date.
+Reconstructed indices exactly following the SPSS logic:
+
+Political trust
+Mean of trstprl, trstplt, trstprt.
+
+Anti-immigration
+Items: imbgeco, imueclt, imwbcnt
+
+Non-linear recoding (0–10 scale) exactly as in SPSS: 0→10, 1→9, 2→8, 3→7, 4→6, 5–8→2, 9→1, 10→0
+Row-wise mean.
+
+Authoritarian values
+Items: ipfrule, ipstrgv, ipbhprp, imptrad, impsafe
+Recoded from 1–6 to 5–0.
+Row-wise mean.
+
+Other variables
+Redistribution: gincdif (1–5 → 4–0)
+Bad economy: stfeco (0–10 → 10–0)
+Controls: age, gender, education, unemployment, income, left-right scale, turnout.
+
+Problems encountered
+Repeated syntax errors
+Missing commas and missing closing parentheses in large mutate() blocks.
+Accidental use of <- inside mutate().
+all_of() failures
+Temporary variables referenced before being created.
+Unemployment miscoded
+ESS uses 0/1 coding in several rounds; initial recode assumed 1/2.
+
+Fixes
+Rewrote the script cleanly from top to bottom.
+Removed fragile temporary columns.
+Computed indices directly from recoded vectors.
+Corrected unemployment coding to handle 0/1 and 1/2 cases robustly.
+Added explicit checks that all required variables exist before proceeding.
+
+Result
+ess_harmonized.rds is produced without errors.
+unemployed has 0% missing.
+interviewdate missingness is ~0% in all rounds except ESS5 (~5%), due to source data.
+
+Final status
+Data quality
+✔ Interview dates available for all rounds (minor residual missingness in ESS5).
+✔ Indices match the original SPSS construction.
+✔ Control variables correctly coded.
+✔ Files reproducible from raw data via scripts.
+
+Remaining edge case
+ESS5 has ~5% missing interview dates.
+Acceptable for replication.
+Can be handled downstream by dropping or imputing within country-round.
+
+Conclusion
+The ESS data preparation pipeline is now methodologically sound, reproducible, and aligned with the original paper. The remaining missingness reflects limitations of the source data, not coding errors.
