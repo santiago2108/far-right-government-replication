@@ -1,6 +1,6 @@
 # ============================================================
 # 03_harmonize_ess.R
-# Harmonise ESS1–ESS8 to paper/SPSS indices and save ess_harmonized.rds
+# Harmonize ESS1–ESS8 like paper/SPSS indices and save as ess_harmonized.rds
 # ============================================================
 
 library(dplyr)
@@ -32,7 +32,7 @@ rec_antimmi <- function(x) {
   out
 }
 
-# Authoritarian sentiment recode EXACTLY as SPSS:
+# Authoritarian items recode EXACTLY as SPSS:
 # (1=5) (2=4) (3=3) (4=2) (5=1) (6=0) else NA
 rec_1_6_to_5_0 <- function(x) {
   x <- as.numeric(zap_labels(x))
@@ -66,7 +66,7 @@ countries_used <- c(
 )
 ess <- ess %>% filter(cntry %in% countries_used)
 
-# Build interviewdate (YYYYMMDD) from harmonised inwyr/inwmm/inwdd
+# Build of interviewdate (YYYYMMDD) from harmonised inwyr/inwmm/inwdd
 ess <- ess %>%
   mutate(
     inwyr = as.numeric(zap_labels(inwyr)),
@@ -77,50 +77,91 @@ ess <- ess %>%
       inwyr * 10000 + inwmm * 100 + inwdd,
       NA_real_
     )
-  ) %>%
-  group_by(cntry, essround) %>%
-  mutate(
-    interviewdate = ifelse(
-      is.na(interviewdate),
-      suppressWarnings(min(interviewdate, na.rm = TRUE)),
-      interviewdate
-    ),
-    interviewdate = ifelse(is.infinite(interviewdate), NA_real_, interviewdate)
-  ) %>%
-  ungroup()
+  )
 
-# If any underlying item is missing entirely, stop with a clear message.
+# Required inputs for THIS script (paper-faithful)
 need_items <- c(
+  # trust
   "trstprl","trstplt","trstprt",
+  # immigration
   "imbgeco","imueclt","imwbcnt",
+  # authoritarian
   "ipfrule","ipstrgv","ipbhprp","imptrad","impsafe",
+  # econ/redistribution
   "gincdif","stfeco",
-  "agea","gndr","eduyrs","uempla","hinctnta","lrscale","vote"
+  # demographics (SPSS)
+  "agea","gndr","hincfel","mnactic","rlgdgr","polintr","domicil","edulvl",
+  # other controls used later
+  "lrscale"
 )
+
 missing_items <- setdiff(need_items, names(ess))
 if (length(missing_items) > 0) {
   stop(
     "These required variables are missing from the combined data:\n",
     paste(missing_items, collapse = ", "),
-    "\nFix 02_import_ess.R keep_vars (or check raw file variable names)."
+    "\nFix 02_combine_ess_raw.R keep_vars (or check raw file variable names)."
   )
 }
 
-# Compute indices + controls
+# ----- Education: translate SPSS block exactly -----
+# SPSS:
+# recode edulvlb (...) into edulvlbR.
+# compute eduSC5=edulvla. then overwrite if edulvlbR exists.
+# recode edusc5 (55=sysmis)
+# RECODE edusc5 (1=0)(2=1)(3=2)(4=3)(5=4) into educ.
+
 ess <- ess %>%
   mutate(
+    edulvl_num = as.numeric(zap_labels(edulvl)),
+    
+    # edulvlbR mapping (applies only where edulvl has the detailed edulvlb codes)
+    edulvlbR = case_when(
+      edulvl_num %in% c(0, 113) ~ 1,
+      edulvl_num %in% c(129, 212, 213, 221, 222, 223) ~ 2,
+      edulvl_num %in% c(229, 311, 312, 313, 321, 322, 323) ~ 3,
+      edulvl_num %in% c(412, 413, 421, 422, 423) ~ 4,
+      edulvl_num %in% c(510, 520, 610, 620, 710, 720, 800) ~ 5,
+      TRUE ~ NA_real_
+    ),
+    
+    edusc5 = case_when(
+      !is.na(edulvlbR) ~ edulvlbR,
+      TRUE ~ edulvl_num
+    ),
+    
+    # SPSS: recode edusc5 (55=sysmis)
+    edusc5 = ifelse(edusc5 == 55, NA_real_, edusc5),
+    
+    # Final 0–4 version as in regression table
+    educ = case_when(
+      edusc5 == 1 ~ 0,
+      edusc5 == 2 ~ 1,
+      edusc5 == 3 ~ 2,
+      edusc5 == 4 ~ 3,
+      edusc5 == 5 ~ 4,
+      TRUE ~ NA_real_
+    )
+  )
+
+# ----- Indices + demographics (paper/SPSS-based) -----
+ess <- ess %>%
+  mutate(
+    # Political trust scale: mean of trust in parliament, politicians, parties
     trust_political = row_mean_spss(cbind(
       as.numeric(zap_labels(trstprl)),
       as.numeric(zap_labels(trstplt)),
       as.numeric(zap_labels(trstprt))
     )),
     
+    # Anti-immigration: mean of 3 recoded items
     anti_immigration = row_mean_spss(cbind(
       rec_antimmi(imbgeco),
       rec_antimmi(imueclt),
       rec_antimmi(imwbcnt)
     )),
     
+    # Authoritarian sentiment: mean of 5 recoded items
     authoritarian = row_mean_spss(cbind(
       rec_1_6_to_5_0(ipfrule),
       rec_1_6_to_5_0(ipstrgv),
@@ -132,38 +173,65 @@ ess <- ess %>%
     redistribution = rev_1_5(gincdif),
     bad_economy    = rev_0_10(stfeco),
     
-    # Controls
-    age       = as.numeric(zap_labels(agea)),
-    female    = case_when(
+    # demographics (SPSS)
+    age = as.numeric(zap_labels(agea)),
+    
+    female = case_when(
       as.numeric(zap_labels(gndr)) == 2 ~ 1,
       as.numeric(zap_labels(gndr)) == 1 ~ 0,
       TRUE ~ NA_real_
     ),
-    education = as.numeric(zap_labels(eduyrs)),
     
-    uempla_num = as.numeric(zap_labels(uempla)),
-    unemployed = case_when(
-      uempla_num == 1 ~ 1,
-      uempla_num %in% c(0, 2) ~ 0,
+    # SPSS: subincome from hincfel (1->3, 2->2, 3->1, 4->0)
+    subincome = case_when(
+      as.numeric(zap_labels(hincfel)) == 1 ~ 3,
+      as.numeric(zap_labels(hincfel)) == 2 ~ 2,
+      as.numeric(zap_labels(hincfel)) == 3 ~ 1,
+      as.numeric(zap_labels(hincfel)) == 4 ~ 0,
       TRUE ~ NA_real_
     ),
     
-    income  = as.numeric(zap_labels(hinctnta)),
-    lrscale = as.numeric(zap_labels(lrscale)),
-    
-    turnout = case_when(
-      as.numeric(zap_labels(vote)) == 1 ~ 1,
-      as.numeric(zap_labels(vote)) == 2 ~ 0,
+    # SPSS: unemployed dummy from mnactic (3–4 = 1, others = 0)
+    mnactic_num = as.numeric(zap_labels(mnactic)),
+    unemployed = case_when(
+      mnactic_num %in% c(3, 4) ~ 1,
+      mnactic_num %in% c(1, 2, 5, 6, 7, 8, 9) ~ 0,
       TRUE ~ NA_real_
-    )
+    ),
+    
+    # SPSS: religiosity is 0–10
+    religiosity = case_when(
+      as.numeric(zap_labels(rlgdgr)) %in% c(77, 88, 99) ~ NA_real_,
+      TRUE ~ as.numeric(zap_labels(rlgdgr))
+    ),
+    
+    # SPSS: political interest recode (1->3, 2->2, 3->1, 4->0)
+    polinterest = case_when(
+      as.numeric(zap_labels(polintr)) == 1 ~ 3,
+      as.numeric(zap_labels(polintr)) == 2 ~ 2,
+      as.numeric(zap_labels(polintr)) == 3 ~ 1,
+      as.numeric(zap_labels(polintr)) == 4 ~ 0,
+      TRUE ~ NA_real_
+    ),
+    
+    # SPSS: urban dummy (domicil 1–3 = 1, 4–5 = 0)
+    urban = case_when(
+      as.numeric(zap_labels(domicil)) %in% 1:3 ~ 1,
+      as.numeric(zap_labels(domicil)) %in% 4:5 ~ 0,
+      TRUE ~ NA_real_
+    ),
+    
+    lrscale = as.numeric(zap_labels(lrscale))
   )
 
-# Final dataset
+# Final dataset 
 ess_harmonized <- ess %>%
   select(
     cntry, essround, interviewdate,
-    trust_political, anti_immigration, authoritarian, redistribution, bad_economy,
-    age, female, education, unemployed, income, lrscale, turnout
+    trust_political, anti_immigration, authoritarian,
+    redistribution, bad_economy,
+    age, female, educ, subincome, unemployed, religiosity, polinterest, urban,
+    lrscale
   )
 
 dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
@@ -171,15 +239,31 @@ saveRDS(ess_harmonized, OUT_PATH)
 
 cat("Saved harmonized file to:\n", OUT_PATH, "\n\n")
 
-# Diagnostics
+# Checks
 cat("Missing interviewdate by round:\n")
 print(ess_harmonized %>% group_by(essround) %>% summarise(pct_na_interviewdate = mean(is.na(interviewdate))))
 
-cat("\nMissing unemployed overall:\n")
-print(ess_harmonized %>% summarise(pct_na_unemployed = mean(is.na(unemployed))))
+cat("\nEducation (educ) distribution:\n")
+print(table(ess_harmonized$educ, useNA = "ifany"))
 
-cat("\nMissing anti_immigration by round:\n")
-print(ess_harmonized %>% group_by(essround) %>% summarise(pct_na_antiimm = mean(is.na(anti_immigration))))
+cat("\nMissing key demographics overall:\n")
+print(ess_harmonized %>%
+        summarise(
+          pct_na_subincome   = mean(is.na(subincome)),
+          pct_na_unemployed  = mean(is.na(unemployed)),
+          pct_na_religiosity = mean(is.na(religiosity)),
+          pct_na_polinterest = mean(is.na(polinterest)),
+          pct_na_urban       = mean(is.na(urban)),
+          pct_na_educ        = mean(is.na(educ))
+        )
+)
 
-cat("\nMissing authoritarian by round:\n")
-print(ess_harmonized %>% group_by(essround) %>% summarise(pct_na_auth = mean(is.na(authoritarian))))
+cat("\nMissing indices overall:\n")
+print(ess_harmonized %>%
+        summarise(
+          pct_na_trust = mean(is.na(trust_political)),
+          pct_na_antiimm = mean(is.na(anti_immigration)),
+          pct_na_auth = mean(is.na(authoritarian))
+        )
+)
+

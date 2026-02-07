@@ -1,5 +1,6 @@
 # ============================================================
-# 02_combine_ess_raw.R  (FIXED + your paths)
+# 02_combine_ess_raw.R  (paper-faithful, ESS1–ESS8)
+# Combine raw ESS rounds and keep only variables needed for Muis et al. (2022)
 # ============================================================
 
 library(dplyr)
@@ -8,64 +9,67 @@ library(haven)
 ESS_RAW_DIR <- "/home/santiagocal09/LMU/ResearchDesign_WS2526/term_paper/data/raw/ess"
 OUT_PATH    <- "/home/santiagocal09/LMU/ResearchDesign_WS2526/term_paper/data/intermediate/ess_raw_combined.rds"
 
-# Variables needed downstream (minimal, for Muis, Brils & Gaidytė 2022 + date harmonisation)
+# Variables needed downstream (close to paper + interview date)
 keep_vars <- c(
-  "cntry","idno","essround",
+  # identifiers
+  "cntry", "idno", "essround",
   
   # interview date variables (round-dependent)
   "inwyr","inwmm","inwdd",          # rounds 1–2
   "inwyys","inwmms","inwdds",       # rounds 3–8 (start date)
   
-  # main variables + controls
-  "vote","trstprl","trstplt","trstprt",
-  "agea","gndr","eduyrs","uempla","lrscale",
-  "stfeco","stfgov","stfdem",
-  "gincdif",
+  # vote + trust (core)
+  "vote",
+  "trstprl","trstplt","trstprt",
   
-  # income (round-dependent)
-  "hinctnt","hinctnta",
+  # demographics / controls used in the paper (SPSS-based)
+  "agea","gndr",
+  "hincfel",                        # subjective income (NOT deciles)
+  "mnactic",                        # main activity (for unemployment dummy)
+  "rlgdgr",                         # religiosity scale
+  "polintr",                        # political interest
+  "domicil",                        # urban/rural dummy
   
-  # anti-immigration (paper/SPSS)
+  # education inputs (A in rounds 1–4, B in rounds 5–8)
+  "edulvla","edulvlb",
+  "eduyrs","eisced",                # optional backups (can help if missing)
+  
+
+  # anti-immigration
   "imbgeco","imueclt","imwbcnt",
   
-  # authoritarian sentiment (paper/SPSS)
+  # authoritarian items 
   "ipfrule","ipstrgv","ipbhprp","imptrad","impsafe"
 )
 
 read_one <- function(path) {
-  df <- read_dta(path)
+  df <- read_dta(path) %>%
+    select(any_of(keep_vars))
   
-  # keep only columns that exist in this round
-  df <- df %>% select(any_of(keep_vars))
-  
-  # ensure date columns exist (create as NA if absent in this round)
-  need_date_cols <- c("inwyr","inwmm","inwdd","inwyys","inwmms","inwdds")
-  for (v in need_date_cols) {
+  # ensure date columns exist (create as NA if absent)
+  date_cols <- c("inwyr","inwmm","inwdd","inwyys","inwmms","inwdds")
+  for (v in date_cols) {
     if (!v %in% names(df)) df[[v]] <- NA
   }
   
-  # harmonize interview date into common names: inwyr/inwmm/inwdd
-  # ---- harmonise interview date into inwyr/inwmm/inwdd ----
+  # harmonize interview date into inwyr/inwmm/inwdd
   # ESS1–2: inwyr/inwmm/inwdd
   # ESS3–8: inwyys/inwmms/inwdds (start date)
+  df <- df %>%
+    mutate(
+      inwyr = coalesce(inwyr, inwyys),
+      inwmm = coalesce(inwmm, inwmms),
+      inwdd = coalesce(inwdd, inwdds)
+    ) %>%
+    select(-any_of(c("inwyys","inwmms","inwdds")))
   
-  if (!"inwyr" %in% names(df) && "inwyys" %in% names(df)) df$inwyr <- df$inwyys
-  if (!"inwmm" %in% names(df) && "inwmms" %in% names(df)) df$inwmm <- df$inwmms
-  if (!"inwdd" %in% names(df) && "inwdds" %in% names(df)) df$inwdd <- df$inwdds
-  
-  if ("inwyys" %in% names(df)) df$inwyr <- dplyr::coalesce(df$inwyr, df$inwyys)
-  if ("inwmms" %in% names(df)) df$inwmm <- dplyr::coalesce(df$inwmm, df$inwmms)
-  if ("inwdds" %in% names(df)) df$inwdd <- dplyr::coalesce(df$inwdd, df$inwdds)
-  
-  df <- df %>% dplyr::select(-dplyr::any_of(c("inwyys","inwmms","inwdds")))
-  
-  # ensure income columns exist; harmonize to hinctnta
-  if (!"hinctnta" %in% names(df)) df[["hinctnta"]] <- NA
-  if (!"hinctnt"  %in% names(df)) df[["hinctnt"]]  <- NA
+  # ensure education columns exist; create unified "edulvl" (A/B)
+  if (!"edulvla" %in% names(df)) df[["edulvla"]] <- NA
+  if (!"edulvlb" %in% names(df)) df[["edulvlb"]] <- NA
   
   df <- df %>%
-    mutate(hinctnta = coalesce(hinctnta, hinctnt)) %>%
-    select(-any_of("hinctnt"))
+    mutate(edulvl = coalesce(edulvla, edulvlb)) %>%
+    select(-any_of(c("edulvla","edulvlb")))
   
   df
 }
@@ -85,8 +89,8 @@ saveRDS(ess_raw_combined, OUT_PATH)
 
 message("Saved combined raw file to: ", OUT_PATH)
 
-# Quick diagnostic: date availability by round
-diag <- ess_raw_combined %>%
+# Checks
+diag_dates <- ess_raw_combined %>%
   group_by(essround) %>%
   summarise(
     n = n(),
@@ -94,6 +98,4 @@ diag <- ess_raw_combined %>%
     pct_na_inwmm = mean(is.na(inwmm)),
     pct_na_inwdd = mean(is.na(inwdd))
   )
-print(diag)
-
-  
+print(diag_dates)
