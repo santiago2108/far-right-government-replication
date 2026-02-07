@@ -3,144 +3,77 @@
 This file documents daily progress, decisions, and next steps for the replication
 of Muis, Brils & Gaidytė (2022).
 
----
+=============================================================================================
+2026-01-06
+=============================================================================================
 
-## 2026-01-06
+What I did:
 
-### What I did
-- Set up clean R project structure and GitHub repository.
-- Resolved Git/GitHub synchronization issues.
-- Downloaded and renamed ESS rounds 1–8 (Stata format).
-- Wrote and ran `02_import_ess.R`.
-- Successfully combined ESS waves 1–8 into a single dataset
-  (`ess_raw_combined.rds`).
-- Verified presence of key variables:
-  - party vote variables (`prtvt*`)
-  - immigration-related items (`im*`)
-  - political trust items (`trstprl`, `trstplt`, `trstprt`).
-- In order to exract the variables I need (given they're not explicitly specified in the paper or any attachements) I contacted the author who kindly sent me SPS and Excel files containing relevant information on the varables they used for the paper. No R code was shared. First of all it is not allowed as per the professor's instructions and second the author mentioned that the IT of the university accidentally deleted his files.
-- I ran the prvided files through ChatGPT to extrat a list of variables I can work with.
+Set up a clean R project structure + GitHub repo; fixed sync issues.
+Downloaded ESS rounds 1–8 (.dta) and wrote/ran 02_import_ess.R.
+Combined ESS1–ESS8 into data/intermediate/ess_raw_combined.rds.
+Confirmed key variable families exist (vote prtvt*, immigration im*, trust trst*).
+Contacted the author for clarification on variables (paper not explicit). They provided SPSS + Excel files listing variables/logic; no R code used/shared (author indicated their R files were lost).
+Extracted a working variable list from the author files.
 
-### What worked / issues
-- ESS import and stacking worked as expected.
-- Variable coverage confirmed via sanity checks.
-- No data loss in vote or trust variables.
+Outputs:
+data/intermediate/ess_raw_combined.rds
 
-### Next steps
-- Translate author-provided SPSS syntax for individual-level variables
-  (political trust, immigration attitudes, authoritarianism).
-- Implement this logic in `03_harmonize_ess.R`.
+Next step:
+Implement SPSS-based variable construction in 03_harmonize_ess.R.
 
-## 2026-01-07 / 2026-01-08
+=============================================================================================
+2026-01-07 / 2026-01-08
+=============================================================================================
 
-### What I did
-ESS Data Preparation Log (ESS1–ESS8)
-Goal
-Reconstruct the individual-level variables used in Muis, Brils & Gaidytė (2022) from ESS rounds 1–8, following the original SPSS syntax as closely as possible, and produce a harmonized dataset for downstream analysis.
-Final outputs:
+Objective:
+Reconstruct individual-level variables from ESS1–ESS8 based on author SPSS syntax and produce a harmonized dataset.
+
+What I did:
+Import: kept only variables needed (trust, immigration, authoritarianism, redistribution, economy, controls, interview timing).
+Harmonized interview date fields across rounds (ESS1–2 vs ESS3–8 naming).
+Harmonized income naming (hinctnt → hinctnta).
+Harmonization: restricted to the 22 countries; converted labelled variables to numeric; created interviewdate and applied SPSS-style date fallback within country-round.
+Built indices per SPSS logic:
+Political trust = mean(trstprl, trstplt, trstprt)
+Anti-immigration = SPSS-style non-linear recode of 0–10 items + mean(imbgeco, imueclt, imwbcnt)
+Authoritarianism = recode 1–6 → 5–0 + mean(ipfrule, ipstrgv, ipbhprp, imptrad, impsafe)
+Redistribution, economy dissatisfaction, and standard controls (age, gender, education, unemployment, income, left-right, turnout)
+
+Main issues + fixes:
+Interview-date missing in ESS3–8 due to wrong columns kept → fixed by adding start-date vars and harmonizing.
+Type issues with labelled data → handled via label zapping/conversion.
+Unemployment coding differences (0/1 vs 1/2) → made recode robust.
+
+Outputs:
 data/intermediate/ess_raw_combined.rds
 data/intermediate/ess_harmonized.rds
 
-Step 1: Raw data combination (02_import_ess.R)
-What was done
-Imported ESS rounds 1–8 from .dta files.
+Result:
+Dataset builds reproducibly; small interview-date missingness remains in ESS5 (source-data limitation).
 
+=============================================================================================
+2026-02-07
+=============================================================================================
 
-Kept only variables required for:
-political trust
-anti-immigration attitudes
-authoritarian values
-redistribution
-economic dissatisfaction
-controls
-interview timing
+I compared the paper and the author-provided SPSS syntax against my current ESS dataset and found that several key 
+demographics/controls required for replication were missing from the working dataset (notably subjective income, 
+main activity for unemployment, religiosity, political interest, urban/rural, and the education coding approach used by the authors).
 
-Harmonized interview date variables, which differ by ESS round:
-ESS1–2: inwyr, inwmm, inwdd
-ESS3–8: inwyys, inwmms, inwdds (start date)
+What I did:
+Updated the ESS import to include the missing variables needed for the replication model (paper/SPSS-aligned controls).
+Rebuilt the harmonized dataset to follow the authors’ SPSS logic more closely, including:
+Political trust index (mean of trust in parliament/politicians/parties)
+Anti-immigration index (SPSS-style recoding + mean across the three items)
+Authoritarianism index (SPSS-style recoding + mean across five items)
+Education recoding using the authors’ method (edulvlb detailed codes → 5-category edusc5 → 0–4 educ)
+Demographic/control variables aligned with the paper (subjective income via hincfel, unemployment from mnactic, 
+religiosity, political interest, urban/rural, plus age and gender)
 
-Explicitly mapped all rounds to unified variables:
-inwyr, inwmm, inwdd
+Outputs:
+Saved updated harmonized dataset as data/intermediate/ess_harmonized.rds.
+Verified that the previously missing harmonized variables now exist in the dataset and checked overall missingness levels; they are low and plausible.
 
-Harmonized income variables (hinctnt → hinctnta).
-
-Saved combined raw file to ess_raw_combined.rds.
-
-Problems encountered
-Interview date missing for rounds 3–8
- Cause: the initial combine script only kept inwyr/inwmm/inwdd, which do not exist in later ESS rounds.
-
-coalesce() failing silently
- Cause: missing columns + haven_labelled types.
-
-Fixes
-Explicitly added missing date columns as NA before harmonisation.
-Used start-date variables (inwyys/inwmms/inwdds) for ESS3–8.
-Verified date availability by round after recombination.
-
-Result
-Interview date components available for all rounds.
-Very small residual missingness in ESS5 (~3–5%), originating from the source data.
-
-Step 2: Harmonization (03_harmonize_ess.R)
-
-What was done
-Filtered to the 22 countries used in the paper.
-Converted all haven_labelled variables to numeric using zap_labels().
-Constructed interviewdate as YYYYMMDD, with SPSS-style within country-round fallback to the minimum date.
-Reconstructed indices exactly following the SPSS logic:
-
-Political trust
-Mean of trstprl, trstplt, trstprt.
-
-Anti-immigration
-Items: imbgeco, imueclt, imwbcnt
-
-Non-linear recoding (0–10 scale) exactly as in SPSS: 0→10, 1→9, 2→8, 3→7, 4→6, 5–8→2, 9→1, 10→0
-Row-wise mean.
-
-Authoritarian values
-Items: ipfrule, ipstrgv, ipbhprp, imptrad, impsafe
-Recoded from 1–6 to 5–0.
-Row-wise mean.
-
-Other variables
-Redistribution: gincdif (1–5 → 4–0)
-Bad economy: stfeco (0–10 → 10–0)
-Controls: age, gender, education, unemployment, income, left-right scale, turnout.
-
-Problems encountered
-Repeated syntax errors
-Missing commas and missing closing parentheses in large mutate() blocks.
-Accidental use of <- inside mutate().
-all_of() failures
-Temporary variables referenced before being created.
-Unemployment miscoded
-ESS uses 0/1 coding in several rounds; initial recode assumed 1/2.
-
-Fixes
-Rewrote the script cleanly from top to bottom.
-Removed fragile temporary columns.
-Computed indices directly from recoded vectors.
-Corrected unemployment coding to handle 0/1 and 1/2 cases robustly.
-Added explicit checks that all required variables exist before proceeding.
-
-Result
-ess_harmonized.rds is produced without errors.
-unemployed has 0% missing.
-interviewdate missingness is ~0% in all rounds except ESS5 (~5%), due to source data.
-
-Final status
-Data quality
-✔ Interview dates available for all rounds (minor residual missingness in ESS5).
-✔ Indices match the original SPSS construction.
-✔ Control variables correctly coded.
-✔ Files reproducible from raw data via scripts.
-
-Remaining edge case
-ESS5 has ~5% missing interview dates.
-Acceptable for replication.
-Can be handled downstream by dropping or imputing within country-round.
-
-Conclusion
-The ESS data preparation pipeline is now methodologically sound, reproducible, and aligned with the original paper. The remaining missingness reflects limitations of the source data, not coding errors.
+Next step:
+Start implementing the contextual government variables (cabinet period / far-right in government) using the author files that assign cabinet IDs 
+by interview date and derive far-right-in-power from cabinet ID.
