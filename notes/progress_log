@@ -77,3 +77,31 @@ Verified that the previously missing harmonized variables now exist in the datas
 Next step:
 Start implementing the contextual government variables (cabinet period / far-right in government) using the author files that assign cabinet IDs 
 by interview date and derive far-right-in-power from cabinet ID.
+
+=============================================================================================
+2026-02-20
+=============================================================================================
+
+What I did:
+
+I re-audited the paper and the author SPSS syntax and found that my earlier ESS import/harmonization missed variables needed for paper-faithful controls 
+and DV construction. I updated the ESS import (scripts/02_import_ess.R) to retain the full set of party-vote variables across rounds/countries (prtvt*/prtv*), 
+because “one prtvt per country” is not consistently present (e.g., Germany uses prtvde1/prtvde2; Lithuania appears in later rounds with prtvlt* variables). 
+I then updated the harmonization (scripts/03_harmonize_ess.R) to match the author SPSS logic more closely after identifying missing demographics/controls in 
+the earlier implementation. Next, I implemented cabinet assignment and the far-right-in-government indicator (scripts/04_add_cabinet_and_farrightinpower.R) 
+using the author’s government-ID Excel rules by joining on country_id, applying interviewdate cutoffs to select the correct cabinetid, and mapping cabinetid 
+to far-right-in-power using the author cabinet classification. Finally, I implemented the far-right vote DV (scripts/05_code_far_right_vote.R) using the author’s 
+SPSS party coding logic by parsing the RECODE block from the author SPSS file “ESS1–8 PARTIES NEWEST.sps”, constructing party_key using the author’s SPSS formula 
+(essround100000 + cnr100 + party_code derived from party-vote variables), and mapping party_key to partyfam and then to fr_vote (0/1). A key troubleshooting result 
+is that Estonia (EE) and Latvia (LV) are not included in the author’s SPSS RECODE table at all; therefore, in a faithful replication, respondents from EE and LV 
+necessarily end up with fr_vote = NA rather than 0. This is a limitation/choice in the author-provided materials, not an implementation bug.
+
+Outputs:
+
+data/intermediate/ess_harmonized.rds
+data/intermediate/ess_with_dv.rds
+
+Next step:
+
+Generate and record the DV sanity-check table of fr_vote counts by country (including NA counts), and do a quick coverage check for the cabinet assignment and 
+far_right_in_power indicator across country-round and interviewdate.
