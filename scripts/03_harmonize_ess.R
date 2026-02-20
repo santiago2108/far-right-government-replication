@@ -227,7 +227,7 @@ ess <- ess %>%
 # Final dataset 
 ess_harmonized <- ess %>%
   select(
-    cntry, essround, interviewdate,
+    idno, cntry, essround, interviewdate,
     trust_political, anti_immigration, authoritarian,
     redistribution, bad_economy,
     age, female, educ, subincome, unemployed, religiosity, polinterest, urban,

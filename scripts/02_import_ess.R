@@ -1,71 +1,60 @@
 # ============================================================
-# 02_combine_ess_raw.R  (paper-faithful, ESS1–ESS8)
-# Combine raw ESS rounds and keep only variables needed for Muis et al. (2022)
+# 02_import_ess.R
+# ESS1–ESS8: import, keep required vars + party-vote vars, combine, save
 # ============================================================
 
 library(dplyr)
 library(haven)
 
-ESS_RAW_DIR <- "/home/santiagocal09/LMU/ResearchDesign_WS2526/term_paper/data/raw/ess"
-OUT_PATH    <- "/home/santiagocal09/LMU/ResearchDesign_WS2526/term_paper/data/intermediate/ess_raw_combined.rds"
+ESS_DIR  <- "data/raw/ess"
+OUT_PATH <- "data/intermediate/ess_raw_combined.rds"
 
-# Variables needed downstream (close to paper + interview date)
 keep_vars <- c(
   # identifiers
-  "cntry", "idno", "essround",
+  "cntry","idno","essround",
   
-  # interview date variables (round-dependent)
-  "inwyr","inwmm","inwdd",          # rounds 1–2
-  "inwyys","inwmms","inwdds",       # rounds 3–8 (start date)
+  # interview date (round-dependent)
+  "inwyr","inwmm","inwdd",
+  "inwyys","inwmms","inwdds",
   
   # vote + trust (core)
-  "vote",
-  "trstprl","trstplt","trstprt",
+  "vote","trstprl","trstplt","trstprt",
   
-  # demographics / controls used in the paper (SPSS-based)
-  "agea","gndr",
-  "hincfel",                        # subjective income (NOT deciles)
-  "mnactic",                        # main activity (for unemployment dummy)
-  "rlgdgr",                         # religiosity scale
-  "polintr",                        # political interest
-  "domicil",                        # urban/rural dummy
-  
-  # education inputs (A in rounds 1–4, B in rounds 5–8)
-  "edulvla","edulvlb",
-  "eduyrs","eisced",                # optional backups (can help if missing)
-  
-
-  # anti-immigration
+  # immigration + authoritarian (paper/SPSS)
   "imbgeco","imueclt","imwbcnt",
+  "ipfrule","ipstrgv","ipbhprp","imptrad","impsafe",
   
-  # authoritarian items 
-  "ipfrule","ipstrgv","ipbhprp","imptrad","impsafe"
+  # econ/redistribution
+  "gincdif","stfeco",
+  
+  # demographics used in SPSS logic
+  "agea","gndr","hincfel","mnactic","rlgdgr","polintr","domicil",
+  
+  # education inputs (A vs B)
+  "edulvla","edulvlb",
+  
+  # left-right
+  "lrscale"
 )
 
 read_one <- function(path) {
   df <- read_dta(path) %>%
-    select(any_of(keep_vars))
-  
-  # ensure date columns exist (create as NA if absent)
-  date_cols <- c("inwyr","inwmm","inwdd","inwyys","inwmms","inwdds")
-  for (v in date_cols) {
-    if (!v %in% names(df)) df[[v]] <- NA
-  }
+    select(any_of(keep_vars), starts_with("prtvt"), starts_with("prtv"))
   
   # harmonize interview date into inwyr/inwmm/inwdd
-  # ESS1–2: inwyr/inwmm/inwdd
-  # ESS3–8: inwyys/inwmms/inwdds (start date)
-  df <- df %>%
-    mutate(
-      inwyr = coalesce(inwyr, inwyys),
-      inwmm = coalesce(inwmm, inwmms),
-      inwdd = coalesce(inwdd, inwdds)
-    ) %>%
-    select(-any_of(c("inwyys","inwmms","inwdds")))
+  if (!("inwyr" %in% names(df))) df$inwyr <- NA
+  if (!("inwmm" %in% names(df))) df$inwmm <- NA
+  if (!("inwdd" %in% names(df))) df$inwdd <- NA
   
-  # ensure education columns exist; create unified "edulvl" (A/B)
-  if (!"edulvla" %in% names(df)) df[["edulvla"]] <- NA
-  if (!"edulvlb" %in% names(df)) df[["edulvlb"]] <- NA
+  if ("inwyys" %in% names(df)) df$inwyr <- coalesce(df$inwyr, df$inwyys)
+  if ("inwmms" %in% names(df)) df$inwmm <- coalesce(df$inwmm, df$inwmms)
+  if ("inwdds" %in% names(df)) df$inwdd <- coalesce(df$inwdd, df$inwdds)
+  
+  df <- df %>% select(-any_of(c("inwyys","inwmms","inwdds")))
+  
+  # unify education into one column edulvl (keep raw A/B inputs out of the way)
+  if (!("edulvla" %in% names(df))) df$edulvla <- NA
+  if (!("edulvlb" %in% names(df))) df$edulvlb <- NA
   
   df <- df %>%
     mutate(edulvl = coalesce(edulvla, edulvlb)) %>%
@@ -74,28 +63,9 @@ read_one <- function(path) {
   df
 }
 
-files <- file.path(ESS_RAW_DIR, paste0("ESS", 1:8, "_raw.dta"))
-
-# fail early if any file is missing
-missing_files <- files[!file.exists(files)]
-if (length(missing_files) > 0) {
-  stop("These files are missing:\n", paste(missing_files, collapse = "\n"))
-}
+files <- file.path(ESS_DIR, paste0("ESS", 1:8, "_raw.dta"))
 
 ess_raw_combined <- bind_rows(lapply(files, read_one))
 
 dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
 saveRDS(ess_raw_combined, OUT_PATH)
-
-message("Saved combined raw file to: ", OUT_PATH)
-
-# Checks
-diag_dates <- ess_raw_combined %>%
-  group_by(essround) %>%
-  summarise(
-    n = n(),
-    pct_na_inwyr = mean(is.na(inwyr)),
-    pct_na_inwmm = mean(is.na(inwmm)),
-    pct_na_inwdd = mean(is.na(inwdd))
-  )
-print(diag_dates)
