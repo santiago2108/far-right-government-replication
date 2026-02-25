@@ -1,10 +1,10 @@
-# ============================================================
+## ============================================================
 # 01_load_packages.R
 # Load required R packages for replication project
 # ============================================================
 
 # This script installs (if necessary) and loads all packages
-# used in the replication and extension analyses.
+# used in the replication.
 # It should be run once at the start of a session.
 
 # ---- Required packages ----
