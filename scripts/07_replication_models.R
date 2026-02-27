@@ -27,9 +27,6 @@ OUT_DIR <- "output/tables"
 OUT_TXT <- file.path(OUT_DIR, "replication_models.txt")
 OUT_RDS <- file.path(OUT_DIR, "replication_models.rds")
 
-dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
-
-
 # ============================================================
 # SECTION 1: LOAD AND PREPARE THE MODELLING SAMPLES
 # ============================================================
@@ -44,9 +41,8 @@ dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 # (script 06) so it can be added back easily as a robustness check.
 
 df <- readRDS(IN_PATH)
-cat("Loaded analysis dataset: N =", nrow(df), "| Countries:", length(unique(df$cntry)), "\n")
 
-# --- Shared base variables (needed by every model) ---
+# --- Common base variables ---
 vars_base <- c(
   "fr_vote", "trust_political_z",
   "age_z", "female_z", "educ_z", "subincome_z",
@@ -76,7 +72,7 @@ if (length(missing_vars) > 0) {
 # Helper function: apply listwise deletion for a given set of variables,
 # then convert key columns to the types glmer() expects.
 # as.integer() gives 0/1 for the binary outcome and context variable.
-# as.factor() turns essround and period into categorical variables —
+# as.factor() turns essround and period into categorical variables
 # essround becomes wave dummies, period becomes the grouping variable.
 make_sample <- function(data, vars) {
   data %>%
@@ -89,7 +85,7 @@ make_sample <- function(data, vars) {
     )
 }
 
-# Build one dataset per model — each contains only complete cases
+# Build one dataset per model, each contains only complete cases
 # for the variables that model actually uses
 df_m1 <- make_sample(df, vars_base)
 df_m2 <- make_sample(df, c(vars_base, vars_policy))
@@ -128,7 +124,6 @@ print(table(df_m3$fr_vote))
 #   Model 2 = Model 1 + policy-related motivations
 #   Model 3 = Model 2 + far right in power + interaction with trust
 
-cat("\n--- Fitting Model 1 (trust + sociodemographic controls only) ---\n")
 m1 <- glmer(
   fr_vote ~
     trust_political_z +                            # key predictor: political trust
@@ -140,9 +135,7 @@ m1 <- glmer(
   family  = binomial(link = "logit"),
   control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
 )
-cat("Model 1 done.\n")
 
-cat("\n--- Fitting Model 2 (+ policy-related motivations) ---\n")
 m2 <- glmer(
   fr_vote ~
     trust_political_z +
@@ -156,9 +149,7 @@ m2 <- glmer(
   family  = binomial(link = "logit"),
   control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
 )
-cat("Model 2 done.\n")
 
-cat("\n--- Fitting Model 3 (+ far right in power + interaction) ---\n")
 # The * operator is shorthand in R:
 #   trust_political_z * farrightpower expands to:
 #   trust_political_z + farrightpower + trust_political_z:farrightpower
@@ -180,8 +171,6 @@ m3 <- glmer(
   family  = binomial(link = "logit"),
   control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
 )
-cat("Model 3 done.\n")
-
 
 # ============================================================
 # SECTION 3: CHECK THE KEY RESULT
@@ -210,14 +199,13 @@ if (int_name %in% names(m3_coefs)) {
   cat("WARNING: interaction term not found in Model 3.\n")
 }
 
-
 # ============================================================
 # SECTION 4: RESULTS TABLE
 # ============================================================
 
 model_list <- list("Model 1" = m1, "Model 2" = m2, "Model 3" = m3)
 
-# Human-readable labels for the table
+# Readable labels for the table
 coef_labels <- c(
   "trust_political_z"                  = "Political trust",
   "farrightpower"                      = "Far right in power (0/1)",
@@ -264,7 +252,6 @@ msummary(
   output       = "markdown"
 )
 sink()
-cat("\nModel table saved to:", OUT_TXT, "\n")
 
 
 # ============================================================
@@ -274,14 +261,11 @@ cat("\nModel table saved to:", OUT_TXT, "\n")
 # differ in their baseline far-right vote probability, after controls.
 # A larger variance = country-periods differ more from each other.
 
-cat("\n=== RANDOM EFFECTS: country-period variance ===\n")
 for (nm in names(model_list)) {
   vc  <- VarCorr(model_list[[nm]])
   var <- as.numeric(vc$period)
   cat(sprintf("%s — country-period intercept variance: %.4f\n", nm, var))
 }
 
-# Save model objects (used by figures/tables scripts downstream)
+# Save model objects 
 saveRDS(model_list, OUT_RDS)
-cat("\nModel objects saved to:", OUT_RDS, "\n")
-cat("\nDone. Script 07 complete.\n")

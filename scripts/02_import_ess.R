@@ -1,24 +1,22 @@
 # ============================================================
 # 02_import_ess.R
+
 # Goal: Load ESS rounds 1-8, keep only the variables I need,
 # combine them into one dataset, and save it.
 # ============================================================
 
-# --- Load packages ---
+# --- packages ---
 
 library(haven)
 library(dplyr)
 
 # --- File paths ---
-# ESS_DIR: the folder where the ESS .dta files are stored
-# OUT_PATH: where to save the combined output file
-ESS_DIR  <- "data/raw/ess"
-OUT_PATH <- "data/intermediate/ess_raw_combined.rds"
+ESS_DIR  <- "data/raw/ess"                           # ESS_DIR: the folder where the ESS .dta files are stored
+OUT_PATH <- "data/intermediate/ess_raw_combined.rds" # OUT_PATH: where to save the combined output file
 
 
-# --- List the variables to keep from each ESS wave file ---
-# Only keep what I actually need for the analysis.
-# "any_of()" later means: keep it if it exists, skip it if it doesn't.
+# --- List the variables to keep from each ESS file ---
+# Only keep what I actually need for the analysis
 
 keep_vars <- c(
   # Who is the respondent and which round/country
@@ -45,7 +43,7 @@ keep_vars <- c(
   # Demographics and controls
   "agea", "gndr", "hincfel", "mnactic", "rlgdgr", "polintr", "domicil",
   
-  # Education — ESS used two different variable names across rounds
+  # Education — the ESS used two different variable names across rounds
   "edulvla", "edulvlb",
   
   # Left-right self-placement
@@ -80,12 +78,12 @@ read_one_ess <- function(path) {
   if ("inwmms" %in% names(df)) df$inwmm <- coalesce(df$inwmm, df$inwmms)
   if ("inwdds" %in% names(df)) df$inwdd <- coalesce(df$inwdd, df$inwdds)
   
-  # Drop the now-redundant "s" versions — we only need inwyr/inwmm/inwdd
+  # Drop the now-redundant "s" versions — only keeps inwyr/inwmm/inwdd
   df <- select(df, -any_of(c("inwyys", "inwmms", "inwdds")))
   
   # Step 4: Harmonize education into one column
   # Early rounds used edulvla; later rounds used edulvlb.
-  # We combine them into a single column called edulvl.
+  # They are combines into a single column called edulvl.
   
   if (!("edulvla" %in% names(df))) df$edulvla <- NA
   if (!("edulvlb" %in% names(df))) df$edulvlb <- NA
@@ -111,16 +109,12 @@ files <- file.path(ESS_DIR, paste0("ESS", 1:8, "_raw.dta"))
 ess_raw_combined <- bind_rows(lapply(files, read_one_ess))
 
 
-# --- Quick sanity check ---
-# Print a summary so you can confirm it worked before moving on.
-cat("Rows:", nrow(ess_raw_combined), "\n")
-cat("Columns:", ncol(ess_raw_combined), "\n")
-cat("Rounds present:", sort(unique(ess_raw_combined$essround)), "\n")
-cat("Countries:", length(unique(ess_raw_combined$cntry)), "\n")
+# --- Quick checks ---
+#cat("Rows:", nrow(ess_raw_combined), "\n")
+#cat("Columns:", ncol(ess_raw_combined), "\n")
+#cat("Rounds present:", sort(unique(ess_raw_combined$essround)), "\n")
+#cat("Countries:", length(unique(ess_raw_combined$cntry)), "\n")
 
 
 # --- Save the combined dataset ---
-# saveRDS() saves the data in R's own format (.rds) — fast and lossless.
 saveRDS(ess_raw_combined, OUT_PATH)
-
-cat("Saved to:", OUT_PATH, "\n")

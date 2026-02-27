@@ -19,13 +19,9 @@
 
 library(dplyr)
 
-# ---- File paths -------------------------------------------------------
+# ---- File paths ----
 IN_PATH  <- "data/intermediate/ess_with_dv.rds"
 OUT_PATH <- "data/final/analysis_dataset.rds"
-
-# Create the output folder if it does not yet exist
-dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
-
 
 # ---- Step 1: Load the data --------------------------------------------
 # ess_with_dv already contains everything built by scripts 03, 04, 05:
@@ -36,15 +32,9 @@ dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
 
 ess <- readRDS(IN_PATH)
 
-cat("Loaded ess_with_dv:  N =", nrow(ess), " | variables:", ncol(ess), "\n")
-cat("\nAll variable names:\n")
-print(names(ess))
+# ---- Step 2: Keep only the variables needed for analysis ----
 
-
-# ---- Step 2: Keep only the variables needed for analysis --------------
-# This makes the final file tidy and easy to work with.
-
-analysis <- ess %>%
+analysis <- ess|>
   select(
     
     # Identifiers (needed to know who is who)
@@ -81,10 +71,10 @@ analysis <- ess %>%
     urban
   )
 
-cat("\nAfter selecting variables:  N =", nrow(analysis), " | variables:", ncol(analysis), "\n")
+#cat("\nAfter selecting variables:  N =", nrow(analysis), " | variables:", ncol(analysis), "\n")
 
 
-# ---- Step 3: Apply the paper's selectperiod filter --------------------
+# ---- Step 3: Apply the paper's selectperiod filter ----
 #
 # The paper defines a "period" as a unique combination of:
 #   ESS round × country × cabinet
@@ -99,26 +89,26 @@ cat("\nAfter selecting variables:  N =", nrow(analysis), " | variables:", ncol(a
 # country_id (the ParlGov numeric ID, unique per country) is used to ensure
 # no two countries accidentally produce the same period number.
 
-analysis <- analysis %>%
+analysis <- analysis|>
   mutate(period = essround * 10000000 + country_id * 10000 + cabinetid)
 
 # Find which periods have at least one far-right voter
-period_has_frvote <- analysis %>%
-  filter(!is.na(fr_vote)) %>%
-  group_by(period) %>%
-  summarise(any_fr = any(fr_vote == 1, na.rm = TRUE)) %>%
+period_has_frvote <- analysis|>
+  filter(!is.na(fr_vote))|>
+  group_by(period)|>
+  summarise(any_fr = any(fr_vote == 1, na.rm = TRUE))|>
   filter(any_fr)
 
-cat("\nPeriods with at least one far-right voter:", nrow(period_has_frvote), "\n")
+#cat("\nPeriods with at least one far-right voter:", nrow(period_has_frvote), "\n")
 
 before <- nrow(analysis)
-analysis <- analysis %>%
+analysis <- analysis|>
   filter(period %in% period_has_frvote$period)
 after  <- nrow(analysis)
 
-cat("Rows dropped by selectperiod filter:", before - after, "\n")
-cat("Rows remaining:", after, "\n")
-cat("Countries remaining:", length(unique(analysis$cntry)), "\n")
+#cat("Rows dropped by selectperiod filter:", before - after, "\n")
+#cat("Rows remaining:", after, "\n")
+#cat("Countries remaining:", length(unique(analysis$cntry)), "\n")
 
 
 # ---- Step 4: Standardize the independent variables -------------------
@@ -130,12 +120,12 @@ cat("Countries remaining:", length(unique(analysis$cntry)), "\n")
 # the standard deviation. We wrap it in as.numeric() because scale()
 # returns a matrix by default, and we want a plain numeric column.
 #
-# We create new columns with a _z suffix so the raw originals are kept.
+# New columns are created with a _z suffix so the raw originals are kept.
 # Only substantive predictors and controls are standardized —
 # NOT the outcome (fr_vote), NOT binary context variables (farrightpower),
 # and NOT the grouping variables (period, cntry, etc.).
 
-analysis <- analysis %>%
+analysis <- analysis|>
   mutate(
     trust_political_z  = as.numeric(scale(trust_political)),
     anti_immigration_z = as.numeric(scale(anti_immigration)),
@@ -153,66 +143,65 @@ analysis <- analysis %>%
   )
 
 # Quick check: mean of a standardized variable should be ~0, SD ~1
-cat("\n--- Standardization check (trust_political_z) ---\n")
-cat("Mean:", round(mean(analysis$trust_political_z, na.rm = TRUE), 4),
-    " (should be ~0)\n")
-cat("SD:  ", round(sd(analysis$trust_political_z,   na.rm = TRUE), 4),
-    " (should be ~1)\n")
+#cat("\n--- Standardization check (trust_political_z) ---\n")
+#cat("Mean:", round(mean(analysis$trust_political_z, na.rm = TRUE), 4),
+#    " (should be ~0)\n")
+#cat("SD:  ", round(sd(analysis$trust_political_z,   na.rm = TRUE), 4),
+#    " (should be ~1)\n")
 
 
 # ---- Step 5: Drop rows missing on the outcome variable ----------------
 # A respondent cannot be used in the regression if their vote is unknown.
 
 before <- nrow(analysis)
-analysis <- analysis %>% filter(!is.na(fr_vote))
+analysis <- analysis|> filter(!is.na(fr_vote))
 after  <- nrow(analysis)
 
-cat("\nRows dropped because fr_vote is missing:", before - after, "\n")
-cat("Rows remaining for analysis:", after, "\n")
+#cat("\nRows dropped because fr_vote is missing:", before - after, "\n")
+#cat("Rows remaining for analysis:", after, "\n")
 
 
-# ---- Step 6: Sanity checks --------------------------------------------
+# ---- Step 6: Checks --------------------------------------------
 
 # 4a: Distribution of the outcome
-cat("\n--- fr_vote (0 = other vote, 1 = far-right vote) ---\n")
-print(table(analysis$fr_vote, useNA = "ifany"))
+#cat("\n--- fr_vote (0 = other vote, 1 = far-right vote) ---\n")
+#print(table(analysis$fr_vote, useNA = "ifany"))
 
 # 4b: Distribution of the key contextual variable
-cat("\n--- farrightpower (0 = not in gov, 1 = in gov) ---\n")
-print(table(analysis$farrightpower, useNA = "ifany"))
+#cat("\n--- farrightpower (0 = not in gov, 1 = in gov) ---\n")
+#print(table(analysis$farrightpower, useNA = "ifany"))
 
 # 4c: How many respondents per country?
-cat("\n--- Number of respondents per country ---\n")
-print(
-  analysis %>%
-    count(cntry, name = "n_respondents") %>%
-    arrange(cntry)
-)
+#cat("\n--- Number of respondents per country ---\n")
+#print(
+#  analysis|>
+#    count(cntry, name = "n_respondents")|>
+#    arrange(cntry)
+#)
 
 # 4d: Missingness table for all key variables
 # The % of missing values is calculated for each variable.
 # Good practice: check this before running any model.
-cat("\n--- % missing per variable ---\n")
+#cat("\n--- % missing per variable ---\n")
 
-miss_table <- analysis %>%
-  summarise(
-    across(
-      everything(),
-      ~ round(mean(is.na(.)) * 100, 1)  # % missing, rounded to 1 decimal
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols      = everything(),
-    names_to  = "variable",
-    values_to = "pct_missing"
-  ) %>%
-  arrange(desc(pct_missing))
+#miss_table <- analysis|>
+#  summarise(
+#    across(
+#      everything(),
+#      ~ round(mean(is.na(.)) * 100, 1)  # % missing, rounded to 1 decimal
+#    )
+#  )|>
+#  tidyr::pivot_longer(
+#    cols      = everything(),
+#    names_to  = "variable",
+#    values_to = "pct_missing"
+#  )|>
+#  arrange(desc(pct_missing))
 
-print(miss_table, n = Inf)
+#print(miss_table, n = Inf)
 
 
 # ---- Step 7: Save -----------------------------------------------------
 saveRDS(analysis, OUT_PATH)
 
-cat("\n=== Done. Final analysis dataset saved to:", OUT_PATH, "===\n")
-cat("Final dataset:  N =", nrow(analysis), " | variables:", ncol(analysis), "\n")
+#cat("Final dataset:  N =", nrow(analysis), " | variables:", ncol(analysis), "\n")

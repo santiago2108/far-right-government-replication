@@ -15,12 +15,10 @@
 #   data/intermediate/ess_with_dv.rds
 # ============================================================
 
-suppressPackageStartupMessages({
   library(dplyr)
   library(haven)
   library(stringr)
   library(readr)
-})
 
 # ---- Paths ----
 ESS_CAB_IN   <- "data/intermediate/ess_with_cabinet.rds"
@@ -34,7 +32,6 @@ OUT_PATH     <- "data/intermediate/ess_with_dv.rds"
 # PART A: Author SPSS partyfam recode table (party_key -> partyfam)
 # ============================================================
 
-stopifnot(file.exists(SPSS_PARTIES))
 spss_lines <- readLines(SPSS_PARTIES, encoding = "UTF-8")
 
 recode_lines <- spss_lines[str_detect(
@@ -44,55 +41,45 @@ recode_lines <- spss_lines[str_detect(
 
 if (length(recode_lines) == 0) stop("No RECODE lines found in SPSS_PARTIES.")
 
-recode_map_spss <- tibble(raw = recode_lines) %>%
+recode_map_spss <- tibble(raw = recode_lines) |>
   mutate(
     party_key_raw = str_extract(raw, "[0-9]+[,.]?[0-9]*(?=\\s*=)"),
     party_key_raw = str_replace(party_key_raw, ",", "."),
     party_key     = as.integer(round(as.numeric(party_key_raw))),
     partyfam_spss = as.integer(str_extract(str_split_fixed(raw, "=", 2)[, 2], "\\d+"))
-  ) %>%
-  filter(!is.na(party_key), !is.na(partyfam_spss)) %>%
-  distinct(party_key, .keep_all = TRUE) %>%
+  ) |>
+  filter(!is.na(party_key), !is.na(partyfam_spss)) |>
+  distinct(party_key, .keep_all = TRUE) |>
   select(party_key, partyfam_spss)
-
-cat("SPSS recode map rows:", nrow(recode_map_spss),
-    "| far-right (partyfam==1):", sum(recode_map_spss$partyfam_spss == 1), "\n")
 
 # ============================================================
 # PART B: PopuList mapping (party_key -> farright_populist)
 # ============================================================
 
-stopifnot(file.exists(SPSS_PARLGOV))
 parlgov_lines <- readLines(SPSS_PARLGOV, encoding = "UTF-8")
 parlgov_lines <- parlgov_lines[str_detect(parlgov_lines, "IF\\s*\\(\\s*party=")]
 
-parlgov_xwalk <- tibble(raw = parlgov_lines) %>%
+parlgov_xwalk <- tibble(raw = parlgov_lines) |>
   mutate(
     party_key  = as.integer(round(as.numeric(str_extract(raw, "(?<=party=\\s{0,5})[0-9.]+")))),
     parlgov_id = as.integer(str_extract(raw, "(?<=partyid=\\s{0,5})[0-9]+"))
-  ) %>%
-  filter(!is.na(party_key), !is.na(parlgov_id)) %>%
-  distinct(party_key, .keep_all = TRUE) %>%
+  ) |>
+  filter(!is.na(party_key), !is.na(parlgov_id)) |>
+  distinct(party_key, .keep_all = TRUE) |>
   select(party_key, parlgov_id)
 
-cat("ParlGov crosswalk rows:", nrow(parlgov_xwalk), "\n")
-
-stopifnot(file.exists(POPULIST_CSV))
 populist_raw <- read_delim(POPULIST_CSV, delim = ";", show_col_types = FALSE)
 
-populist_farright <- populist_raw %>%
-  select(parlgov_id, farright) %>%
-  filter(!is.na(parlgov_id)) %>%
-  mutate(parlgov_id = as.integer(parlgov_id)) %>%
-  group_by(parlgov_id) %>%
+populist_farright <- populist_raw |>
+  select(parlgov_id, farright) |>
+  filter(!is.na(parlgov_id)) |>
+  mutate(parlgov_id = as.integer(parlgov_id)) |>
+  group_by(parlgov_id) |>
   summarise(farright_populist = as.integer(max(farright, na.rm = TRUE)), .groups = "drop")
 
-recode_map_populist <- parlgov_xwalk %>%
-  left_join(populist_farright, by = "parlgov_id") %>%
+recode_map_populist <- parlgov_xwalk |>
+  left_join(populist_farright, by = "parlgov_id") |>
   select(party_key, farright_populist)
-
-cat("PopuList covers party_keys:", sum(!is.na(recode_map_populist$farright_populist)),
-    "| far-right via PopuList:", sum(recode_map_populist$farright_populist == 1, na.rm = TRUE), "\n")
 
 # ============================================================
 # PART C: Compute party_key from ESS vote variables
@@ -107,15 +94,6 @@ raw <- readRDS(ESS_RAW_IN)
 # "(0) ESS1-8 General-independent-individual-variables.sps", NOT
 # standard ISO 3166-1 codes. They must match exactly or every party_key
 # will be wrong and no parties will be found in the lookup tables.
-#
-# The previous (broken) version used ISO codes:
-#   BG=100, EE=233, LT=440, HR=191
-#
-# The correct SPSS codes are:
-#   BG=88,  EE=288, LT=488, HR=311
-#
-# Using the wrong codes produces party_keys that don't match anything
-# in the SPSS recode table, giving near-zero far-right vote detection.
 
 cnr_map <- tibble(
   cntry = c("AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "FI",
@@ -125,29 +103,20 @@ cnr_map <- tibble(
               250,  826,  300,  311,  348,  380,  488,  528,  578,  616,
               752,  705,  703)
 )
-# Verification against SPSS source (recode cntry ('XX'=nn)):
-#   AT=40   BE=56   BG=88  <- NOT 100
-#   CH=756  CZ=203  DE=276
-#   DK=208  EE=288  <- NOT 233
-#   FI=246  FR=250  GB=826
-#   GR=300  HR=311  <- NOT 191
-#   HU=348  IT=380  LT=488  <- NOT 440
-#   NL=528  NO=578  PL=616
-#   SE=752  SI=705  SK=703
 
-# Party vote columns (keep broad to preserve coverage)
+# Party vote columns
 vote_cols <- grep("^(prtvt|prtv)", names(raw), value = TRUE)
 if (length(vote_cols) == 0) stop("No prtvt/prtv vote columns found in ess_raw_combined.")
 
-raw_votes <- raw %>%
-  select(cntry, idno, essround, vote, all_of(vote_cols)) %>%
+raw_votes <- raw |>
+  select(cntry, idno, essround, vote, all_of(vote_cols)) |>
   mutate(
     vote = as.numeric(zap_labels(vote)),
     across(all_of(vote_cols), ~ as.numeric(zap_labels(.)))
   )
 
-ess2 <- ess %>%
-  left_join(raw_votes, by = c("cntry", "idno", "essround")) %>%
+ess2 <- ess |>
+  left_join(raw_votes, by = c("cntry", "idno", "essround")) |>
   left_join(cnr_map,   by = "cntry")
 
 if (any(is.na(ess2$cnr))) {
@@ -159,7 +128,7 @@ vote_matrix <- as.matrix(sapply(ess2[vote_cols], as.numeric))
 party_mean  <- rowMeans(vote_matrix, na.rm = TRUE)
 party_mean[is.nan(party_mean)] <- NA_real_
 
-ess2 <- ess2 %>%
+ess2 <- ess2 |>
   mutate(
     party_code = as.integer(round(party_mean)),
     party_key  = as.integer(essround * 100000 + cnr * 100 + party_code)
@@ -169,8 +138,8 @@ ess2 <- ess2 %>%
 # PART D: Join codings + build fr_vote
 # ============================================================
 
-ess_with_dv <- ess2 %>%
-  left_join(recode_map_spss, by = "party_key") %>%
+ess_with_dv <- ess2 |>
+  left_join(recode_map_spss, by = "party_key") |>
   mutate(
     partyfam_spss = ifelse(partyfam_spss == 0, NA_integer_, as.integer(partyfam_spss)),
     fr_spss = case_when(
@@ -178,8 +147,8 @@ ess_with_dv <- ess2 %>%
       partyfam_spss == 1L  ~ 1L,
       TRUE                 ~ 0L
     )
-  ) %>%
-  left_join(recode_map_populist, by = "party_key") %>%
+  ) |>
+  left_join(recode_map_populist, by = "party_key") |>
   mutate(
     fr_vote = case_when(
       # Non-voters and ineligible -> excluded from analysis
@@ -195,29 +164,27 @@ ess_with_dv <- ess2 %>%
       # Genuine reference category: voters for non-far-right parties and blank voters.
       TRUE                                                   ~ 0L
     )
-  ) %>%
+  ) |>
   select(-all_of(vote_cols))
 
 # ============================================================
-# PART E: Save + sanity checks
+# PART E: Save and checks
 # ============================================================
 
-dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
 saveRDS(ess_with_dv, OUT_PATH)
-cat("\nSaved:", OUT_PATH, "\n")
 
-cat("\n--- DV missingness checks ---\n")
-voted <- !is.na(ess_with_dv$vote) & ess_with_dv$vote == 1
-cat("Voters N:", sum(voted), "\n")
-cat("party_code NA among voters (%):", round(mean(is.na(ess_with_dv$party_code[voted])) * 100, 2), "\n")
-cat("party_key  NA among voters (%):", round(mean(is.na(ess_with_dv$party_key[voted]))  * 100, 2), "\n")
-cat("fr_vote    NA among voters (%):", round(mean(is.na(ess_with_dv$fr_vote[voted]))    * 100, 2), " (should equal party_code NA %)\n")
+#cat("\n--- DV missingness checks ---\n")
+#voted <- !is.na(ess_with_dv$vote) & ess_with_dv$vote == 1
+#cat("Voters N:", sum(voted), "\n")
+#cat("party_code NA among voters (%):", round(mean(is.na(ess_with_dv$party_code[voted])) * 100, 2), "\n")
+#cat("party_key  NA among voters (%):", round(mean(is.na(ess_with_dv$party_key[voted]))  * 100, 2), "\n")
+#cat("fr_vote    NA among voters (%):", round(mean(is.na(ess_with_dv$fr_vote[voted]))    * 100, 2), " (should equal party_code NA %)\n")
 
-cat("\n--- fr_vote counts by country (all respondents) ---\n")
-print(
-  ess_with_dv %>% count(cntry, fr_vote, name = "n") %>% arrange(cntry, fr_vote),
-  n = Inf
-)
+#cat("\n--- fr_vote counts by country (all respondents) ---\n")
+#print(
+#  ess_with_dv |> count(cntry, fr_vote, name = "n") |> arrange(cntry, fr_vote),
+#  n = Inf
+#)
 
-cat("\n--- Agreement SPSS vs PopuList (raw flags, all respondents) ---\n")
-print(table(SPSS = ess_with_dv$fr_spss, PopuList = ess_with_dv$farright_populist, useNA = "ifany"))
+#cat("\n--- Agreement SPSS vs PopuList (raw flags, all respondents) ---\n")
+#print(table(SPSS = ess_with_dv$fr_spss, PopuList = ess_with_dv$farright_populist, useNA = "ifany"))

@@ -12,22 +12,22 @@
 # as closely as possible.
 # ============================================================
 
-library(dplyr)   # for data manipulation (mutate, filter, select, etc.)
-library(haven)   # for zap_labels() — strips SPSS value labels from numbers
+library(dplyr)
+library(haven)
 
 
-# ---- File paths -------------------------------------------------------
+# ---- File paths ----
 
 RAW_PATH <- "data/intermediate/ess_raw_combined.rds"
 OUT_PATH <- "data/intermediate/ess_harmonized.rds"
 
 
-# ---- Helper functions -------------------------------------------------
+# ---- Helper functions ----
 
 # SPSS's MEAN() calculates the mean of available items per row.
 # It returns NA only when ALL items are missing.
 # R's rowMeans() does the same when na.rm = TRUE, but returns NaN
-# (not NA) when all values are missing — so it fixes that.
+# (not NA) when all values are missing, so it fixes that.
 row_mean_spss <- function(mat) {
   out <- rowMeans(mat, na.rm = TRUE)  # mean ignoring NAs
   out[is.nan(out)] <- NA_real_        # replace NaN with proper NA
@@ -64,17 +64,11 @@ recode_1_5_to_4_0 <- function(x) {
 }
 
 
-# ---- Load data --------------------------------------------------------
+# ---- Load data -----
 
 ess <- readRDS(RAW_PATH)
 
-cat("Loaded ESS data:", nrow(ess), "rows,", ncol(ess), "columns\n")
-cat("ESS rounds present:", sort(unique(ess$essround)), "\n")
-cat("Countries present:", sort(unique(as.character(ess$cntry))), "\n\n")
-
-
 # ---- Step 1: Keep only the 22 countries used in the paper -------------
-# The paper uses a specific set of European countries (see Table 1 in paper).
 
 countries_used <- c(
   "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "FI", "FR", "GB",
@@ -82,27 +76,24 @@ countries_used <- c(
 )
 
 # Make sure cntry is a plain character vector before filtering
-ess <- ess %>%
-  mutate(cntry = as.character(cntry)) %>%
+ess <- ess |>
+  mutate(cntry = as.character(cntry)) |>
   filter(cntry %in% countries_used)
 
-cat("After country filter:", nrow(ess), "rows\n")
-cat("Countries kept:", sort(unique(ess$cntry)), "\n")
-cat("N countries kept:", length(unique(ess$cntry)), "\n\n")
-cat("=== Rows per country and ESS round (after filter) ===\n")
-print(
-  ess %>%
-    count(cntry, essround, name = "n") %>%
-    arrange(cntry, essround),
-  n = Inf
-)
-cat("\n")
+#cat("After country filter:", nrow(ess), "rows\n")
+#cat("Countries kept:", sort(unique(ess$cntry)), "\n")
+#cat("N countries kept:", length(unique(ess$cntry)), "\n\n")
+#cat("=== Rows per country and ESS round (after filter) ===\n")
+#print(
+#  ess |>
+#    count(cntry, essround, name = "n") |>
+#    arrange(cntry, essround),
+#  n = Inf
+#)
+#cat("\n")
 
 
-# ---- Step 2: Check all required raw variables exist -------------------
-# This will stop the script early with a clear message if something
-# is missing from the raw data.
-
+# ---- Step 2: Check all required raw variables exist -------
 required_vars <- c(
   # Political trust
   "trstprl", "trstplt", "trstprt",
@@ -133,10 +124,10 @@ if (length(missing_vars) > 0) {
   )
 }
 
-cat("All required variables found.\n\n")
+#cat("All required variables found.\n\n")
 
 
-# ---- Step 3: Build interview date (YYYYMMDD integer) ------------------
+# ---- Step 3: Build interview date (YYYYMMDD integer) ----
 #
 # The SPSS syntax uses a THREE-STEP fallback to handle missing dates:
 #
@@ -155,10 +146,9 @@ cat("All required variables found.\n\n")
 #           This means the cabinet assignment is the same regardless of
 #           the exact date, so using the round minimum is safe.
 #
-# After all three steps, interviewdate should have zero (or near-zero)
-# missingness.
+# After all three steps, interviewdate should have zero (or near-zero) missingness
 
-ess <- ess %>%
+ess <- ess |>
   mutate(
     # Convert all date parts to plain numbers
     inwyr = as.numeric(zap_labels(inwyr)),
@@ -176,7 +166,7 @@ ess <- ess %>%
 # Step B: Fill remaining NAs using end-of-interview date (inwyye/inwmme/inwdde)
 # Check if these columns may not exist in all ESS rounds.
 if (all(c("inwyye", "inwmme", "inwdde") %in% names(ess))) {
-  ess <- ess %>%
+  ess <- ess |>
     mutate(
       inwyye = as.numeric(zap_labels(inwyye)),
       inwmme = as.numeric(zap_labels(inwmme)),
@@ -193,14 +183,14 @@ if (all(c("inwyye", "inwmme", "inwdde") %in% names(ess))) {
         interviewdate_end,
         interviewdate
       )
-    ) %>%
-    # Drop the helper columns — we no longer need them
+    ) |>
+    # Drop the helper columns 
     select(-inwyye, -inwmme, -inwdde, -interviewdate_end)
   
-  cat("Step B (end-of-interview fallback) applied.\n")
-} else {
-  cat("Step B skipped: inwyye/inwmme/inwdde columns not found in data.\n")
-  cat("  (This is expected if 02_import_ess.R did not import them.)\n")
+  #cat("Step B (end-of-interview fallback) applied.\n")
+#} else {
+#  cat("Step B skipped: inwyye/inwmme/inwdde columns not found in data.\n")
+#  cat("  (This is expected if 02_import_ess.R did not import them.)\n")
 }
 
 # Step C: Impute the minimum interview date within each country × ESS round
@@ -212,10 +202,10 @@ if (all(c("inwyye", "inwmme", "inwdde") %in% names(ess))) {
 #
 # The imputed value is only used when interviewdate is still NA.
 n_missing_before_c <- sum(is.na(ess$interviewdate))
-cat("Missing interview dates before Step C:", n_missing_before_c, "\n")
+#cat("Missing interview dates before Step C:", n_missing_before_c, "\n")
 
-ess <- ess %>%
-  group_by(cntry, essround) %>%
+ess <- ess |>
+  group_by(cntry, essround) |>
   mutate(
     # Calculate the earliest date seen in this country × round.
     # IMPORTANT: if every respondent in a group has NA (e.g. Estonia Round 5),
@@ -227,24 +217,23 @@ ess <- ess %>%
       interviewdate_min,
       interviewdate
     )
-  ) %>%
-  ungroup() %>%
-  select(-interviewdate_min) %>%  # clean up helper column
+  ) |>
+  ungroup() |>
+  select(-interviewdate_min) |>  # clean up helper column
   # Fix: if min() returned Inf (whole group was NA), convert back to NA.
   # is.infinite() catches Inf; those rows had no date at all and should
   # stay NA rather than get a nonsense Inf value.
   mutate(interviewdate = ifelse(is.infinite(interviewdate), NA_real_, interviewdate))
 
 n_missing_after_c <- sum(is.na(ess$interviewdate))
-cat("Missing interview dates after  Step C:", n_missing_after_c, "\n")
-cat("(Any remaining NAs are from country-rounds where NO respondent had a date,\n")
-cat(" so no group minimum could be computed. Cabinet assignment for these\n")
-cat(" respondents will be handled by script 04's fallback logic.)\n\n")
+#cat("Missing interview dates after  Step C:", n_missing_after_c, "\n")
+#cat("(Any remaining NAs are from country-rounds where NO respondent had a date,\n")
+#cat(" so no group minimum could be computed. Cabinet assignment for these\n")
+#cat(" respondents will be handled by script 04's fallback logic.)\n\n")
 
 
-# ---- Step 4: Education variable (educ, 0-4) ---------------------------
-
-ess <- ess %>%
+# ---- Step 4: Education variable (educ, 0-4) -----
+ess <- ess |>
   mutate(
     edulvl_num = as.numeric(zap_labels(edulvl)),
     edulvlbR = case_when(
@@ -271,9 +260,9 @@ ess <- ess %>%
   )
 
 
-# ---- Step 5: Build all other variables --------------------------------
+# ---- Step 5: Build all other variables ----
 
-ess <- ess %>%
+ess <- ess |>
   mutate(
     trust_political = row_mean_spss(cbind(
       as.numeric(zap_labels(trstprl)),
@@ -337,9 +326,9 @@ ess <- ess %>%
   )
 
 
-# ---- Step 6: Select final columns for the harmonized dataset ----------
+# ---- Step 6: Select final columns -----
 
-ess_harmonized <- ess %>%
+ess_harmonized <- ess |>
   select(
     idno, cntry, essround, interviewdate,
     trust_political, anti_immigration, authoritarian, redistribution, bad_economy,
@@ -348,48 +337,47 @@ ess_harmonized <- ess %>%
   )
 
 
-# ---- Step 7: Save output ----------------------------------------------
+# ---- Step 7: Save output -----
 
 dir.create(dirname(OUT_PATH), recursive = TRUE, showWarnings = FALSE)
 saveRDS(ess_harmonized, OUT_PATH)
 
-cat("Saved harmonized dataset to:", OUT_PATH, "\n")
-cat("Rows:", nrow(ess_harmonized), "| Columns:", ncol(ess_harmonized), "\n\n")
+#cat("Rows:", nrow(ess_harmonized), "| Columns:", ncol(ess_harmonized), "\n\n")
 
 
-# ---- Step 8: Sanity checks --------------------------------------------
+# ---- Step 8: Checks --------------------------------------------
 
-cat("=== Missing interview date by ESS round ===\n")
-print(
-  ess_harmonized %>%
-    group_by(essround) %>%
-    summarise(pct_missing = round(mean(is.na(interviewdate)) * 100, 1))
-)
+#cat("=== Missing interview date by ESS round ===\n")
+#print(
+#  ess_harmonized |>
+#    group_by(essround) |>
+#    summarise(pct_missing = round(mean(is.na(interviewdate)) * 100, 1))
+#)
 # After the three-step fallback, pct_missing should be 0% for all rounds.
 # The original SPSS had ~230 initially missing, reduced to 63 after step B,
 # and those 63 were imputed in step C. So 0% is the expected result.
 
-cat("\n=== Education (educ) distribution: 0 = lowest, 4 = highest ===\n")
-print(table(ess_harmonized$educ, useNA = "ifany"))
+#cat("\n=== Education (educ) distribution: 0 = lowest, 4 = highest ===\n")
+#print(table(ess_harmonized$educ, useNA = "ifany"))
 
-cat("\n=== Missing values for key variables (%) ===\n")
-print(
-  ess_harmonized %>%
-    summarise(
-      trust_political  = round(mean(is.na(trust_political))  * 100, 1),
-      anti_immigration = round(mean(is.na(anti_immigration)) * 100, 1),
-      authoritarian    = round(mean(is.na(authoritarian))    * 100, 1),
-      redistribution   = round(mean(is.na(redistribution))   * 100, 1),
-      bad_economy      = round(mean(is.na(bad_economy))      * 100, 1),
-      educ             = round(mean(is.na(educ))             * 100, 1),
-      subincome        = round(mean(is.na(subincome))        * 100, 1),
-      unemployed       = round(mean(is.na(unemployed))       * 100, 1)
-    )
-)
+#cat("\n=== Missing values for key variables (%) ===\n")
+#print(
+#  ess_harmonized |>
+#    summarise(
+#      trust_political  = round(mean(is.na(trust_political))  * 100, 1),
+#      anti_immigration = round(mean(is.na(anti_immigration)) * 100, 1),
+#      authoritarian    = round(mean(is.na(authoritarian))    * 100, 1),
+#      redistribution   = round(mean(is.na(redistribution))   * 100, 1),
+#      bad_economy      = round(mean(is.na(bad_economy))      * 100, 1),
+#      educ             = round(mean(is.na(educ))             * 100, 1),
+#      subincome        = round(mean(is.na(subincome))        * 100, 1),
+#      unemployed       = round(mean(is.na(unemployed))       * 100, 1)
+#   )
+#)
 
-cat("\n=== Rows per country ===\n")
-print(
-  ess_harmonized %>%
-    count(cntry, name = "n_respondents") %>%
-    arrange(cntry)
-)
+#cat("\n=== Rows per country ===\n")
+#print(
+#  ess_harmonized |>
+#    count(cntry, name = "n_respondents") |>
+#    arrange(cntry)
+#)
