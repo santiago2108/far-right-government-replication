@@ -257,7 +257,7 @@ sink()
 # ============================================================
 # SECTION 5: RANDOM EFFECTS SUMMARY
 # ============================================================
-# The random intercept variance tells us how much country-periods
+# The random intercept variance tells how much country-periods
 # differ in their baseline far-right vote probability, after controls.
 # A larger variance = country-periods differ more from each other.
 
