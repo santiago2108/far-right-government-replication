@@ -1,16 +1,17 @@
-# R / RStudio
+# R / RStudio noise
 .Rproj.user/
 .Rhistory
 .RData
 .Ruserdata
 
-# Raw data (do not commit survey microdata or privately shared files)
-data/raw/
+# OS junk
+.DS_Store
+Thumbs.db
 
-# Derived data
-data/intermediate/
-data/final/
-
-# Outputs
-output/
-
+# Secrets (never commit)
+**/.Renviron
+**/.env
+**/*token*
+**/*apikey*
+**/*api_key*
+**/credentials*.json
