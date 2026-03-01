@@ -11,8 +11,6 @@
 #      - two lines: far-right IN power vs NOT in power
 #
 # IMPORTANT: all predictors in script 07 are standardized (_z suffix).
-# The random grouping variable is "period" (country-period), not "cntry".
-# There is no lrscale in the models.
 #
 # OUTPUTS:
 #   output/tables/replication_table.html
@@ -21,12 +19,12 @@
 # ============================================================
 
 
-# ---- 0. PACKAGES ----
+# ---- PACKAGES ----
 
-library(dplyr)        # data wrangling
-library(ggplot2)      # plots
-library(modelsummary) # regression tables
-library(scales)       # percent formatting on y-axis
+library(dplyr)        
+library(ggplot2)      
+library(modelsummary) 
+library(scales)       
 
 
 # ---- 1. LOAD DATA AND MODELS ----
@@ -42,23 +40,25 @@ print(names(dat))
 
 # ---- 2. REGRESSION TABLE ----
 
-# These labels must match the exact variable names used in script 07.
+# These labels match the exact variable names used in script 07.
 # All continuous predictors end in _z because script 07 standardized them.
 var_labels <- c(
-  "trust_political_z"                = "Political trust",
-  "farrightpower"                    = "Far right in power",
-  "trust_political_z:farrightpower"  = "Political trust × Far right in power",
-  "anti_immigration_z"               = "Anti-immigration attitudes",
-  "authoritarian_z"                  = "Authoritarian values",
-  "redistribution_z"                 = "Redistribution preference",
-  "bad_economy_z"                    = "Economic dissatisfaction",
+  "female_z"                         = "Gender: female",
   "age_z"                            = "Age",
-  "female_z"                         = "Female",
   "educ_z"                           = "Education",
   "subincome_z"                      = "Subjective income",
+  "urban_z"                          = "Living area: urban",
   "religiosity_z"                    = "Religiosity",
   "polinterest_z"                    = "Political interest",
-  "urban_z"                          = "Urban",
+  
+  "trust_political_z"                = "Political trust",
+  "anti_immigration_z"               = "Anti-immigration attitudes",
+  "authoritarian_z"                  = "Authoritarian sentiment",
+  "bad_economy_z"                    = "Bad economy",
+  "redistribution_z"                 = "Income redistribution",
+  
+  "farrightpower"                    = "Far right in power",
+  "trust_political_z:farrightpower"  = "Pol. trust × far right in power",
   "(Intercept)"                      = "Intercept"
 )
 
@@ -82,7 +82,7 @@ cat("Regression table saved to output/tables/replication_table.html\n")
 # ---- 3. PREDICTED PROBABILITY PLOT ----
 
 # Script 07 uses three separate datasets (df_m1, df_m2, df_m3) with their own
-# listwise deletion. We recreate df_m3 here (the Model 3 sample) so our means
+# listwise deletion. I recreate df_m3 here (the Model 3 sample) so the means
 # are computed on exactly the same rows the model was fitted on.
 
 vars_m3 <- c(
@@ -114,10 +114,10 @@ df_m3 <- dat %>%
 cat("\nModel 3 analytic sample: N =", nrow(df_m3), "\n")
 
 
-# --- Build the prediction grid ---
+# --- Building the prediction grid ---
 
 # The model uses trust_political_z (the standardized version).
-# To show a meaningful x-axis (0-10 original scale), we:
+# To show a meaningful x-axis (0-10 original scale), I will:
 #   1. Vary trust_political_z across its realistic range
 #   2. Also store the back-transformed original value for the x-axis label
 #
@@ -127,8 +127,8 @@ cat("\nModel 3 analytic sample: N =", nrow(df_m3), "\n")
 trust_mean <- mean(df_m3$trust_political_z, na.rm = TRUE)  # should be ~0 after standardizing
 trust_sd   <- sd(df_m3$trust_political_z,   na.rm = TRUE)  # should be ~1 after standardizing
 
-# We create z-values that correspond to original trust scores 0-10.
-# But since the variable IS the z-score, we just vary it across its observed range.
+# I create z-values that correspond to original trust scores 0-10.
+# But since the variable IS the z-score, I just vary it across its observed range.
 # seq() from min to max gives us a smooth curve.
 trust_z_range <- seq(
   from = min(df_m3$trust_political_z, na.rm = TRUE),
@@ -169,7 +169,7 @@ prediction_grid <- prediction_grid %>%
 
 # type = "response" gives probabilities (0-1) instead of log-odds
 # re.form = NA ignores country-period random effects
-#           = we get the prediction for a "typical" country-period
+#           = the prediction for a "typical" country-period
 prediction_grid$predicted_prob <- predict(
   models[["Model 3"]],
   newdata = prediction_grid,
@@ -180,10 +180,10 @@ prediction_grid$predicted_prob <- predict(
 
 # --- Prepare for plotting ---
 
-# We want the x-axis to show the original 0-10 trust scale, not z-scores.
-# We need to know the original mean and SD to back-transform.
+# I want the x-axis to show the original 0-10 trust scale, not z-scores.
+# I need to know the original mean and SD to back-transform.
 # IMPORTANT: trust_political_z was created from trust_political in script 06.
-# We need those original values. Check if trust_political exists in dat.
+# I need those original values. Check if trust_political exists in dat.
 
 if ("trust_political" %in% names(dat)) {
   # Use the original variable to get the true mean and SD
@@ -273,7 +273,7 @@ dev.off()
 
 # Select the original (non-standardized) versions where available,
 # since those are more interpretable in a descriptive table.
-# We use any_of() so it doesn't crash if a column is missing.
+# Use any_of() so it doesn't crash if a column is missing.
 
 desc_vars <- dat %>%
   select(any_of(c(

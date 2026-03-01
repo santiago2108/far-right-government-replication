@@ -57,7 +57,7 @@ vars_policy <- c(
 )
 
 # --- Additional variables for Model 3 only ---
-vars_m3 <- c("farrightpower")
+vars_m3 <- c("farrightpower", "cntry")
 
 # Check all variables exist in the dataset before proceeding.
 # setdiff() returns anything in the first list that is NOT in the second.
@@ -207,21 +207,21 @@ model_list <- list("Model 1" = m1, "Model 2" = m2, "Model 3" = m3)
 
 # Readable labels for the table
 coef_labels <- c(
-  "trust_political_z"                  = "Political trust",
-  "farrightpower"                      = "Far right in power (0/1)",
-  "trust_political_z:farrightpower"    = "Trust x Far right in power",
-  "anti_immigration_z"                 = "Anti-immigration attitudes",
-  "authoritarian_z"                    = "Authoritarian values",
-  "redistribution_z"                   = "Redistribution preference",
-  "bad_economy_z"                      = "Economic dissatisfaction",
-  "age_z"                              = "Age",
-  "female_z"                           = "Female",
-  "educ_z"                             = "Education",
-  "subincome_z"                        = "Subjective income",
-  "religiosity_z"                      = "Religiosity",
-  "polinterest_z"                      = "Political interest",
-  "urban_z"                            = "Urban (1=yes)",
-  "(Intercept)"                        = "Intercept"
+  "trust_political_z"               = "Political trust",
+  "farrightpower"                   = "Far right in power",
+  "trust_political_z:farrightpower" = "Pol. trust × far right in power",
+  "anti_immigration_z"              = "Anti-immigration attitudes",
+  "authoritarian_z"                 = "Authoritarian sentiment",
+  "redistribution_z"                = "Income redistribution",
+  "bad_economy_z"                   = "Bad economy",
+  "age_z"                           = "Age",
+  "female_z"                        = "Gender: female",
+  "educ_z"                          = "Education",
+  "subincome_z"                     = "Subjective income",
+  "religiosity_z"                   = "Religiosity",
+  "polinterest_z"                   = "Political interest",
+  "urban_z"                         = "Living area: urban",
+  "(Intercept)"                     = "Intercept"
 )
 
 # Print to console
@@ -269,3 +269,48 @@ for (nm in names(model_list)) {
 
 # Save model objects 
 saveRDS(model_list, OUT_RDS)
+
+# ============================================================
+# SECTION 6: SENSITIVITY CHECK — FIXED-EFFECTS LOGISTIC REGRESSION
+# ============================================================
+#
+# PURPOSE:
+#   Re-estimate Model 3 replacing the random intercept at the
+#   country-period level with country and round dummy variables.
+#   This absorbs all stable between-country differences without
+#   assuming they are normally distributed (as the random intercept
+#   assumes). If the interaction holds here, it is not an artefact
+#   of the multilevel structure.
+#
+# NOTE: this model was run after observing the main results.
+
+# Re-use df_m3 (already built in Section 1 above)
+# cntry needed in the data — check it exists
+if (!"cntry" %in% names(df_m3)) {
+  stop("Variable 'cntry' not found in df_m3. Add it to vars_m3 in Section 1.")
+}
+
+model3_fe <- glm(
+  fr_vote ~ trust_political_z * farrightpower +
+    anti_immigration_z + authoritarian_z + redistribution_z + bad_economy_z +
+    age_z + female_z + educ_z + subincome_z + religiosity_z +
+    polinterest_z + urban_z +
+    factor(cntry) + factor(essround),
+  data   = df_m3,
+  family = binomial(link = "logit")
+)
+
+# --- Extract the interaction term and report it ---
+coef_fe <- coef(model3_fe)["trust_political_z:farrightpower"]
+se_fe   <- sqrt(diag(vcov(model3_fe)))["trust_political_z:farrightpower"]
+z_fe    <- coef_fe / se_fe
+p_fe    <- 2 * pnorm(abs(z_fe), lower.tail = FALSE)
+or_fe   <- exp(coef_fe)
+
+cat("\n---- Sensitivity check: fixed-effects logistic regression ----\n")
+cat("Interaction OR :", round(or_fe, 3), "\n")
+cat("SE (log-OR)    :", round(se_fe, 3), "\n")
+cat("z              :", round(z_fe,  3), "\n")
+cat("p              :", round(p_fe,  4), "\n")
+cat("Multilevel OR  : 1.398  (Model 3 above, for comparison)\n")
+cat("--------------------------------------------------------------\n")
