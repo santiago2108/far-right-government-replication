@@ -6,95 +6,73 @@
 #   1. Loads the analysis dataset and the fitted models from script 07
 #   2. Makes a regression table (Table 2 from the paper)
 #   3. Makes a predicted probability plot (Figure 5 from the paper):
-#      - x-axis: political trust (0-10)
+#      - x-axis: political trust (0-10, back-transformed from standardized)
 #      - y-axis: predicted probability of voting far-right
 #      - two lines: far-right IN power vs NOT in power
 #
-# INPUT:
-#   data/final/analysis_dataset.rds       (built by script 06)
-#   output/tables/replication_models.rds  (built by script 07)
+# IMPORTANT: all predictors in script 07 are standardized (_z suffix).
+# The random grouping variable is "period" (country-period), not "cntry".
+# There is no lrscale in the models.
 #
 # OUTPUTS:
-#   output/tables/replication_table.html   (Word table)
-#   output/figures/interaction_plot.png    (the key figure)
-#   output/tables/descriptive_stats.html   (descriptive statistics)
+#   output/tables/replication_table.html
+#   output/figures/interaction_plot.png
+#   output/tables/descriptive_stats.html
 # ============================================================
 
 
 # ---- 0. PACKAGES ----
 
-# The same packages from script 01 are used here, plus a few new ones.
-# - modelsummary : makes publication-ready regression tables
-# - ggplot2      : makes plots (part of tidyverse)
-# - dplyr        : data wrangling (part of tidyverse)
-# - scales       : formats axis labels (e.g. percentages)
-
-library(dplyr)
-library(ggplot2)
-library(modelsummary)
-library(scales)
+library(dplyr)        # data wrangling
+library(ggplot2)      # plots
+library(modelsummary) # regression tables
+library(scales)       # percent formatting on y-axis
 
 
 # ---- 1. LOAD DATA AND MODELS ----
 
-# Load the analysis dataset (built in script 06)
-dat <- readRDS("data/final/analysis_dataset.rds")
-
-# Load the list of fitted models (built in script 07).
-# Script 07 saves models to output/tables/replication_models.rds.
-# The list contains: "Model 1", "Model 2", "Model 3"
+dat    <- readRDS("data/final/analysis_dataset.rds")
 models <- readRDS("output/tables/replication_models.rds")
 
-# Quick check: what models are loaded?
 cat("Models loaded:", names(models), "\n")
-cat("Dataset rows:", nrow(dat), "| Countries:", length(unique(dat$cntry)), "\n\n")
+cat("Dataset rows:", nrow(dat), "| Columns:", ncol(dat), "\n")
+cat("Column names:\n")
+print(names(dat))
 
 
 # ---- 2. REGRESSION TABLE ----
 
-# modelsummary() takes a list of models and makes a formatted table.
-# The following are customized:
-#   - which statistics to show (odds ratios + confidence intervals)
-#   - variable names replaced with readable labels
-#   - a title added
-
-# Variable labels: left side = name in model, right side = label in table
+# These labels must match the exact variable names used in script 07.
+# All continuous predictors end in _z because script 07 standardized them.
 var_labels <- c(
-  "trust_political"               = "Political trust (0-10)",
-  "farrightpower"                 = "Far right in power",
-  "trust_political:farrightpower" = "Political trust × Far right in power",
-  "anti_immigration"              = "Anti-immigration attitudes",
-  "authoritarian"                 = "Authoritarian values",
-  "redistribution"                = "Redistribution preference",
-  "bad_economy"                   = "Economic dissatisfaction",
-  "age"                           = "Age",
-  "female"                        = "Female",
-  "educ"                          = "Education (0-4)",
-  "subincome"                     = "Subjective income (0-3)",
-  "unemployed"                    = "Unemployed",
-  "religiosity"                   = "Religiosity (0-10)",
-  "polinterest"                   = "Political interest (0-3)",
-  "urban"                         = "Urban (1=yes)",
-  "lrscale"                       = "Left-right placement (0-10)",
-  "(Intercept)"                   = "Intercept"
+  "trust_political_z"                = "Political trust",
+  "farrightpower"                    = "Far right in power",
+  "trust_political_z:farrightpower"  = "Political trust × Far right in power",
+  "anti_immigration_z"               = "Anti-immigration attitudes",
+  "authoritarian_z"                  = "Authoritarian values",
+  "redistribution_z"                 = "Redistribution preference",
+  "bad_economy_z"                    = "Economic dissatisfaction",
+  "age_z"                            = "Age",
+  "female_z"                         = "Female",
+  "educ_z"                           = "Education",
+  "subincome_z"                      = "Subjective income",
+  "religiosity_z"                    = "Religiosity",
+  "polinterest_z"                    = "Political interest",
+  "urban_z"                          = "Urban",
+  "(Intercept)"                      = "Intercept"
 )
 
 dir.create("output/tables", recursive = TRUE, showWarnings = FALSE)
 
-# Make the table and save as a Word document.
-# NOTE: requires the 'officer' package. If not installed, run:
-#   install.packages("officer")
-# HTML files can be opened directly in any browser
-# for an HTML version that can be opened in a browser.
 modelsummary(
   models,
-  exponentiate = TRUE,            # show Odds Ratios (not log-odds)
-  statistic    = "conf.int",      # show 95% confidence intervals
-  coef_map     = var_labels,      # apply the nicer variable names
-  stars        = TRUE,            # add * p<0.05, ** p<0.01, *** p<0.001
+  exponentiate = TRUE,       # show Odds Ratios instead of log-odds
+  statistic    = "conf.int", # show 95% confidence intervals
+  coef_map     = var_labels,
+  stars        = TRUE,
   gof_omit     = "AIC|BIC|Log|Deviance|RMSE",
-  title        = "Table 1. Multilevel Logistic Regression of Far-Right Voting",
-  notes        = "Odds ratios shown. 95% confidence intervals in brackets.",
+  title        = "Table 1. Multilevel Logistic Regression of Far-Right Voting (Odds Ratios)",
+  notes        = "Odds ratios. 95% CI in brackets. Random intercept by country-period.",
   output       = "output/tables/replication_table.html"
 )
 
@@ -103,164 +81,212 @@ cat("Regression table saved to output/tables/replication_table.html\n")
 
 # ---- 3. PREDICTED PROBABILITY PLOT ----
 
-# The key finding: the effect of political trust on far-right voting is
-# WEAKER when the far right is in government.
+# Script 07 uses three separate datasets (df_m1, df_m2, df_m3) with their own
+# listwise deletion. We recreate df_m3 here (the Model 3 sample) so our means
+# are computed on exactly the same rows the model was fitted on.
+
+vars_m3 <- c(
+  "fr_vote",
+  "trust_political_z", "farrightpower",
+  "anti_immigration_z", "authoritarian_z", "redistribution_z", "bad_economy_z",
+  "age_z", "female_z", "educ_z", "subincome_z",
+  "religiosity_z", "polinterest_z", "urban_z",
+  "essround", "period"
+)
+
+# Check all needed variables exist before trying to use them
+missing_vars <- setdiff(vars_m3, names(dat))
+if (length(missing_vars) > 0) {
+  stop("These variables are missing from analysis_dataset.rds:\n",
+       paste(missing_vars, collapse = ", "),
+       "\nCheck script 06.")
+}
+
+df_m3 <- dat %>%
+  filter(if_all(all_of(vars_m3), ~ !is.na(.))) %>%
+  mutate(
+    fr_vote       = as.integer(fr_vote),
+    farrightpower = as.integer(farrightpower),
+    essround      = as.factor(essround),
+    period        = as.factor(period)
+  )
+
+cat("\nModel 3 analytic sample: N =", nrow(df_m3), "\n")
+
+
+# --- Build the prediction grid ---
+
+# The model uses trust_political_z (the standardized version).
+# To show a meaningful x-axis (0-10 original scale), we:
+#   1. Vary trust_political_z across its realistic range
+#   2. Also store the back-transformed original value for the x-axis label
 #
-# To show this visually:
-#   Step 1: A "prediction grid" is created — a small data frame covering all
-#           combinations of trust (0-10) and farrightpower (0 or 1),
-#           with all other variables held at their mean or median.
-#   Step 2: The model is used to predict probabilities for each row.
-#   Step 3: Trust is plotted on the x-axis, predicted probability on the
-#           y-axis, with separate lines for "in power" vs "not in power".
+# The standardization formula was: z = (x - mean) / sd
+# So to go back: x = z * sd + mean
 
-# --- Step 3a: Make the prediction grid ---
+trust_mean <- mean(df_m3$trust_political_z, na.rm = TRUE)  # should be ~0 after standardizing
+trust_sd   <- sd(df_m3$trust_political_z,   na.rm = TRUE)  # should be ~1 after standardizing
 
-# The model uses the raw 0-10 trust variable (trust_political),
-# so no standardization is needed. The grid covers the full 0-10 range.
-# All other continuous controls are held at their mean from the data.
-# Binary controls (female, urban) are held at their median (0 and 1).
+# We create z-values that correspond to original trust scores 0-10.
+# But since the variable IS the z-score, we just vary it across its observed range.
+# seq() from min to max gives us a smooth curve.
+trust_z_range <- seq(
+  from = min(df_m3$trust_political_z, na.rm = TRUE),
+  to   = max(df_m3$trust_political_z, na.rm = TRUE),
+  length.out = 50   # 50 evenly-spaced points = smooth line
+)
 
+# expand.grid() creates every combination of trust_z and farrightpower
 prediction_grid <- expand.grid(
-  trust_political = seq(0, 10, by = 0.5),  # trust from 0 to 10 in steps of 0.5
-  farrightpower   = c(0, 1)                # both conditions: in power and not
+  trust_political_z = trust_z_range,
+  farrightpower     = c(0, 1)
 )
 
-# Add all other model variables, held at their mean/median
+# Add all other variables held at their mean (= 0, since they are standardized)
+# Standardized variables have mean = 0 by definition, so this is easy.
 prediction_grid <- prediction_grid %>%
   mutate(
-    anti_immigration = mean(dat$anti_immigration, na.rm = TRUE),
-    authoritarian    = mean(dat$authoritarian,    na.rm = TRUE),
-    redistribution   = mean(dat$redistribution,   na.rm = TRUE),
-    bad_economy      = mean(dat$bad_economy,       na.rm = TRUE),
-    age              = mean(dat$age,               na.rm = TRUE),
-    educ             = mean(dat$educ,              na.rm = TRUE),
-    subincome        = mean(dat$subincome,         na.rm = TRUE),
-    religiosity      = mean(dat$religiosity,       na.rm = TRUE),
-    polinterest      = mean(dat$polinterest,       na.rm = TRUE),
-    lrscale          = mean(dat$lrscale,           na.rm = TRUE),
-    female           = 0,   # held at median (male = most common)
-    urban            = 1,   # held at median (urban = most common)
-    unemployed       = 0,
-    # ESS round held at round 5 (middle of the study period)
-    essround         = factor(5, levels = levels(factor(dat$essround)))
+    anti_immigration_z = 0,   # mean of a standardized variable is always 0
+    authoritarian_z    = 0,
+    redistribution_z   = 0,
+    bad_economy_z      = 0,
+    age_z              = 0,
+    female_z           = 0,
+    educ_z             = 0,
+    subincome_z        = 0,
+    religiosity_z      = 0,
+    polinterest_z      = 0,
+    urban_z            = 0,
+    
+    # period and essround are needed by the formula but will be ignored
+    # because we set re.form = NA (see below)
+    essround = levels(df_m3$essround)[1],
+    period   = levels(df_m3$period)[1]
   )
 
-# --- Step 3b: Get predicted probabilities ---
 
-# predict() on a glmer model gives log-odds by default.
-# type = "response" converts them to probabilities (0-1 scale).
-# re.form = NA ignores random effects, giving the "average country" prediction.
+# --- Get predicted probabilities ---
+
+# type = "response" gives probabilities (0-1) instead of log-odds
+# re.form = NA ignores country-period random effects
+#           = we get the prediction for a "typical" country-period
 prediction_grid$predicted_prob <- predict(
-  models[["Model 3"]],      # use Model 3 (the one WITH the interaction)
+  models[["Model 3"]],
   newdata = prediction_grid,
-  type    = "response",     # return probabilities, not log-odds
-  re.form = NA              # ignore country random effects (average country)
+  type    = "response",
+  re.form = NA
 )
 
-# --- Step 3c: Make the plot ---
 
-# farrightpower is turned into a readable label for the legend
+# --- Prepare for plotting ---
+
+# We want the x-axis to show the original 0-10 trust scale, not z-scores.
+# We need to know the original mean and SD to back-transform.
+# IMPORTANT: trust_political_z was created from trust_political in script 06.
+# We need those original values. Check if trust_political exists in dat.
+
+if ("trust_political" %in% names(dat)) {
+  # Use the original variable to get the true mean and SD
+  orig_mean <- mean(dat$trust_political, na.rm = TRUE)
+  orig_sd   <- sd(dat$trust_political,   na.rm = TRUE)
+  
+  # Back-transform: original = z * sd + mean
+  prediction_grid <- prediction_grid %>%
+    mutate(trust_original = trust_political_z * orig_sd + orig_mean)
+  
+  x_var   <- "trust_original"
+  x_label <- "Political trust (0 = no trust, 10 = complete trust)"
+  cat("Using original trust scale (0-10) for x-axis.\n")
+  
+} else {
+  # If original variable not available, just use the z-score on x-axis
+  prediction_grid <- prediction_grid %>%
+    mutate(trust_original = trust_political_z)
+  
+  x_var   <- "trust_original"
+  x_label <- "Political trust (standardized)"
+  cat("Original trust_political not found — using z-score for x-axis.\n")
+}
+
+# Add readable legend label
 prediction_grid <- prediction_grid %>%
   mutate(
-    status = ifelse(farrightpower == 1,
-                    "Far right in power",
-                    "Far right in opposition")
+    status = ifelse(
+      farrightpower == 1,
+      "Far right in power",
+      "Far right in opposition"
+    )
   )
 
-# Build the plot with ggplot2.
-# ggplot works in layers:
-#   ggplot()       sets up the axes (aes = "aesthetics")
-#   geom_line()    draws the lines
-#   labs()         adds titles and axis labels
-#   theme_bw()     sets a clean black-and-white style
+
+# --- Build the plot ---
 
 interaction_plot <- ggplot(
   data    = prediction_grid,
   mapping = aes(
-    x        = trust_political,  # x-axis: political trust (0-10)
-    y        = predicted_prob,   # y-axis: predicted probability
-    color    = status,           # different color per line
-    linetype = status            # different line type per line
+    x        = trust_original,
+    y        = predicted_prob,
+    color    = status,
+    linetype = status
   )
 ) +
-  
-  # Draw the lines
-  geom_line(linewidth = 1) +
-  
-  # Labels for axes, title, and legend
+  geom_line(size = 1) +
   labs(
     title    = "Effect of Political Trust on Far-Right Voting",
-    subtitle = "Predicted probabilities from Model 3 (other variables held at mean)",
-    x        = "Political trust (0 = no trust, 10 = full trust)",
+    subtitle = "Predicted probabilities from Model 3 (all other variables at their mean)",
+    x        = x_label,
     y        = "Predicted probability of far-right vote",
     color    = "Far-right party status",
     linetype = "Far-right party status"
   ) +
-  
-  # Format the y-axis as percentages
-  scale_y_continuous(labels = percent_format(accuracy = 1)) +
-  
-  # Colors: black for opposition, grey for in power
-  scale_color_manual(values = c(
+  scale_y_continuous(labels = function(x) paste0(round(x * 100, 1), "%")) +  scale_color_manual(values = c(
     "Far right in opposition" = "black",
     "Far right in power"      = "grey50"
   )) +
-  
-  # Line types: solid for opposition, dashed for in power
   scale_linetype_manual(values = c(
     "Far right in opposition" = "solid",
     "Far right in power"      = "dashed"
   )) +
-  
-  # Clean theme
   theme_bw(base_size = 13) +
   theme(
     legend.position = "bottom",
     plot.title      = element_text(face = "bold")
   )
 
-# Display the plot in RStudio
 print(interaction_plot)
-
-# --- Step 3d: Save the plot ---
 
 dir.create("output/figures", recursive = TRUE, showWarnings = FALSE)
 
-ggsave(
+# Instead of ggsave(), use base R's png device
+png(
   filename = "output/figures/interaction_plot.png",
-  plot     = interaction_plot,
   width    = 7,
   height   = 5,
-  dpi      = 300,
-  device   = png   # use base R png device to avoid graphics API conflicts
+  units    = "in",
+  res      = 300
 )
-
-cat("Interaction plot saved to output/figures/interaction_plot.png\n")
+print(interaction_plot)
+dev.off()
 
 
 # ---- 4. DESCRIPTIVE STATISTICS TABLE ----
 
-# A simple summary table of the main variables.
-# Useful for the "Data" section of the paper.
+# Select the original (non-standardized) versions where available,
+# since those are more interpretable in a descriptive table.
+# We use any_of() so it doesn't crash if a column is missing.
 
 desc_vars <- dat %>%
-  select(
-    fr_vote,
-    trust_political,
-    anti_immigration,
-    authoritarian,
-    farrightpower,
-    age, female, educ
-  )
+  select(any_of(c(
+    "fr_vote", "trust_political", "farrightpower",
+    "anti_immigration", "authoritarian",
+    "age", "female", "educ"
+  )))
 
-# datasummary_skim() from modelsummary gives a quick summary of all variables
 datasummary_skim(
   desc_vars,
-  title  = "Table A1. Descriptive Statistics",
+  title  = "Table A1. Descriptive Statistics (full dataset)",
   output = "output/tables/descriptive_stats.html"
 )
 
 cat("Descriptive statistics saved to output/tables/descriptive_stats.html\n")
-
 cat("\nScript 08 complete!\n")
